@@ -1,0 +1,127 @@
+[project]
+name = "shai-hulud-guard"
+version = "2.0.0"
+description = "Cross-platform scanner, auto-fixer, and hardening assistant for the Shai-Hulud npm supply-chain worm family."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "and.altobello@gmail.com" }]
+keywords = ["security", "supply-chain", "npm", "malware", "shai-hulud", "incident-response"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+# Runtime: stdlib only. Do NOT add runtime dependencies — it is a documented
+# supply-chain-hardening invariant for this project. See CLAUDE.md §5.4 and §7.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.5.0",
+    "pyinstaller>=6.0",
+]
+
+[project.urls]
+"Datadog IOC repo" = "https://github.com/DataDog/indicators-of-compromise/tree/main/shai-hulud-2.0"
+"CISA advisory"    = "https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem"
+
+# No [project.scripts] entry: the package is intentionally distributed as a
+# single .py file (and a PyInstaller .exe), not as a pip-installable console
+# command. Build via `python build.py` — see docs/RUFF.md and CLAUDE.md §8.3.
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ruff — combined linter + formatter
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+extend-exclude = [
+    "dist",
+    "build",
+    "*.egg-info",
+    ".venv",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Rule groups (see docs/RUFF.md for what each one catches):
+#   E, W  — pycodestyle errors / warnings
+#   F     — pyflakes (real bugs: unused imports, undefined names, ...)
+#   I     — isort (import ordering)
+#   B     — flake8-bugbear (common Python footguns)
+#   UP    — pyupgrade (modernise syntax for target-version)
+#   S     — flake8-bandit (security rules — IMPORTANT for this project)
+#   C4    — flake8-comprehensions (idiomatic comprehensions)
+#   SIM   — flake8-simplify (catch obviously simplifiable code)
+#   RET   — flake8-return (return-statement consistency)
+select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RET"]
+
+# Per-rule ignores that we accept deliberately:
+#   S603 — `subprocess` call without `shell=True` check. We DO use shell=False
+#          everywhere (see CLAUDE.md §5.8) but ruff's heuristic flags every call.
+#   S607 — partial executable path (`npm`, `git`). Intentional — we want OS
+#          PATH resolution, not a hardcoded /usr/bin/npm.
+#   S310 — urllib.request.urlopen flagged as "suspicious". We use stdlib urllib
+#          deliberately to avoid taking a `requests` dependency (CLAUDE.md §5.4,
+#          §7). The URLs are constrained to the npm registry — see fetch_bytes /
+#          _fetch_json which only call out to registry.npmjs.org + its CDN.
+#   S324 — hashlib SHA-1 use. We do not CHOOSE SHA-1 — we verify *against the
+#          SHA-1 the npm registry publishes* for older packages (fallback path
+#          when the tarball metadata has shasum but no integrity field). The
+#          modern path uses SHA-512. Removing SHA-1 verification would silently
+#          skip integrity checks on those older packages.
+#   E501 — line too long. The IOC pattern table is intentionally one tuple per
+#          line; breaking those across lines hurts readability of the regex +
+#          description pairing.
+ignore = ["S603", "S607", "S310", "S324", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use `assert`, fixture tarballs with IOC-shaped strings,
+# and mock subprocess calls — those would otherwise trip S101, S105, S404, S301.
+"tests/**/*.py" = ["S101", "S105", "S106", "S404", "S301", "B011"]
+# Build scripts run subprocess heavily and write generated files.
+"build.py"      = ["S404"]
+
+[tool.ruff.format]
+# Use double quotes consistently. Match the existing v1.1 and v2.0 style.
+quote-style = "double"
+indent-style = "space"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  pytest
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# -ra  → short summary of all non-passing outcomes
+# -q   → quieter default; use -v on CI if you want per-test names
+# --strict-markers → typo in @pytest.mark.foo fails fast instead of silently passing
+# --strict-config  → typo in pytest config fails fast
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+]
+markers = [
+    "network: marks tests that require live network access (deselect with '-m \"not network\"')",
+    "slow:    marks tests that take >1s (deselect with '-m \"not slow\"')",
+]
+# Don't pick up __pycache__ etc. inside the repo when collecting.
+norecursedirs = [".git", ".venv", "venv", "dist", "build", "__pycache__"]

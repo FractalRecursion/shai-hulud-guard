@@ -1,0 +1,45 @@
+# Normalise line endings.
+# Source files always use LF, regardless of who clones the repo. This avoids
+# CRLF surprises on Windows checkouts that would otherwise show every file
+# as modified after a fresh clone, and avoids hash-stability issues when a
+# Windows contributor runs PyInstaller on Python source the build script
+# expects to read as bytes.
+
+# Default: text auto-detect, normalise to LF on commit, check out LF.
+* text=auto eol=lf
+
+# Source code: always LF.
+*.py        text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.txt       text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+
+# Shell scripts: LF mandatory (CRLF breaks shebangs on Linux/macOS).
+*.sh        text eol=lf
+
+# Windows scripts: CRLF (cmd.exe and PowerShell tolerate both, but Windows
+# tooling occasionally choke on LF in .bat).
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+# Makefile: LF strictly (tabs and LF are part of make's contract).
+Makefile    text eol=lf
+
+# Binary blobs — never normalise.
+*.png       binary
+*.jpg       binary
+*.ico       binary
+*.gz        binary
+*.tar       binary
+*.zip       binary
+*.exe       binary
+
+# Mark generated build artifacts as generated so GitHub doesn't count them
+# in language stats and `git diff` collapses them.
+dist/**     linguist-generated=true
+build/**    linguist-generated=true
