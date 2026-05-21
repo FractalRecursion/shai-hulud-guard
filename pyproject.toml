@@ -1,12 +1,12 @@
 [project]
 name = "shai-hulud-guard"
-version = "2.0.0"
-description = "Cross-platform scanner, auto-fixer, and hardening assistant for the Shai-Hulud npm supply-chain worm family."
+version = "2.4.0"
+description = "Cross-platform scanner, hardener, and proactive-defence tool for the Shai-Hulud npm/PyPI supply-chain worm family and adjacent attack surface."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "and.altobello@gmail.com" }]
-keywords = ["security", "supply-chain", "npm", "malware", "shai-hulud", "incident-response"]
+keywords = ["security", "supply-chain", "npm", "pypi", "malware", "shai-hulud", "incident-response", "typosquatting"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
