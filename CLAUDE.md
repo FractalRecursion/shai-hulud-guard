@@ -503,6 +503,7 @@ The canonical artefact is the source `.py` file; the binary is convenience.
 - `docs/JSON_SCHEMA.md` — `--json` schema, with an LLM-paste-ready example.
 - `docs/SECURITY_REVIEW.md` — framework-driven (NIST CSF 2.0 / SSDF, OpenSSF Scorecard, OWASP CICD-SEC, SLSA, MITRE ATT&CK, CWE) final review + scored assessment + prioritised roadmap.
 - `docs/RUFF.md` — ruff rule-group explainer.
+- `docs/SESSION_STATE.md` — point-in-time session handoff (verbatim detection logic, calibration numbers, open issues, exact next action). Snapshot as of commit `cdd134a`; may go stale — trust the code + this CLAUDE.md over it if they diverge.
 - `benchmarks/run_calibration.py` + `BENCHMARKS.md` — live-registry top-50 npm + top-50 PyPI scoring, **pinned to stable versions** for reproducibility (no publish-age noise).
 
 ---
