@@ -1,0 +1,112 @@
+# Release — fires when a `v*` tag is pushed (or via manual dispatch).
+#
+# Builds a single-file binary on each OS, publishes them alongside the
+# canonical source .py, a SHA256SUMS manifest, and a SLSA build-provenance
+# attestation (GitHub's first-party attest-build-provenance — verify later
+# with: gh attestation verify <file> --repo <owner>/<repo>).
+#
+# Actions are SHA-pinned (see ci.yml for the rationale). The Release itself is
+# created with the preinstalled `gh` CLI rather than a third-party action, to
+# keep the trusted-action surface minimal.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v2.4.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: shai_hulud_guard-linux-x86_64
+          - os: macos-latest
+            asset: shai_hulud_guard-macos-arm64
+          - os: windows-latest
+            asset: shai_hulud_guard-windows-x86_64.exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build single-file binary
+        run: python build.py
+
+      - name: Stage artifact (per-OS name)
+        shell: bash
+        run: |
+          mkdir -p out
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp dist/shai_hulud_guard.exe "out/${{ matrix.asset }}"
+          else
+            cp dist/shai_hulud_guard "out/${{ matrix.asset }}"
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ matrix.asset }}
+          path: out/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # create the Release + upload assets
+      id-token: write        # OIDC, for provenance signing
+      attestations: write    # write the build-provenance attestation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          path: artifacts
+
+      - name: Assemble release files + checksums
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          cp shai_hulud_guard.py release/
+          ( cd release && sha256sum * ) > SHA256SUMS
+          mv SHA256SUMS release/
+          echo "----- release contents -----"; ls -la release
+          echo "----- SHA256SUMS -----"; cat release/SHA256SUMS
+
+      - name: Generate SLSA build provenance attestation
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f  # v3.2.0
+        with:
+          subject-path: "release/*"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release create "$TAG" release/* \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes

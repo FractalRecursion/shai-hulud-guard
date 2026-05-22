@@ -1,0 +1,24 @@
+# Dependabot keeps the *tooling* supply chain current. The runtime tool has
+# ZERO third-party dependencies by design (see CLAUDE.md §5.4 / §7), so there
+# is nothing to update there — but the GitHub Actions and the dev tooling
+# (ruff, pytest, pyinstaller) are themselves a supply-chain surface.
+version: 2
+updates:
+  # Pin-bumps for the SHA-pinned actions used by our workflows. Dependabot
+  # understands SHA-pinned `uses:` and will PR the new SHA + version comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels: ["dependencies", "github-actions"]
+
+  # Dev-only Python tooling declared in pyproject.toml [project.optional-dependencies].
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    labels: ["dependencies", "python"]

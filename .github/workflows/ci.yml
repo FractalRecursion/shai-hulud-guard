@@ -1,0 +1,66 @@
+# CI — runs the full validation suite on every push / PR.
+#
+# This is the same gate documented in docs/SECURITY_REVIEW.md §8 and maps to
+# the OpenSSF Scorecard "CI-Tests" check and NIST SSDF practices.
+#
+# Actions are SHA-pinned (not tag-pinned) on purpose: this is a supply-chain
+# security tool, and an unpinned `@v4` tag can be silently re-pointed at a
+# malicious commit (the exact action-poisoning vector this project detects).
+# The tool's own --protect generator pins actions the same way.
+name: CI
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: CI only needs to read the repository contents.
+permissions:
+  contents: read
+
+# A new push to the same ref cancels the previous, still-running run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.8", "3.10", "3.12"]
+        # Python 3.8 is not available on the arm64 macos-latest runner;
+        # cover 3.8 on macOS via the Intel macos-13 runner instead.
+        exclude:
+          - os: macos-latest
+            python-version: "3.8"
+        include:
+          - os: macos-13
+            python-version: "3.8"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dev tooling (pinned)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "ruff==0.15.13" "pytest>=7.0" "pytest-cov>=4.0"
+
+      - name: Lint (ruff)
+        run: python -m ruff check .
+
+      - name: Unit tests (pytest)
+        run: python -m pytest
+
+      - name: Self-test (synthetic infection roundtrip)
+        run: python shai_hulud_guard.py --self-test
