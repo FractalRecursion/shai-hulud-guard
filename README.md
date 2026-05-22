@@ -3,7 +3,10 @@
 > **Current version: v2.4.0** — single-file Python CLI scanner, hardener, and proactive-defence tool for the Shai-Hulud npm / PyPI supply-chain worm family.
 > Zero runtime dependencies. Python 3.8+. Linux / macOS / Windows.
 
-[![Self-test](https://img.shields.io/badge/self--test-6%2F6%20passing-brightgreen)](#self-test) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE) [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/) [![Stdlib only](https://img.shields.io/badge/runtime%20deps-0-brightgreen)](pyproject.toml)
+<!-- Live status badges (turn green once the repo is pushed and Actions run). -->
+[![CI](https://github.com/FractalRecursion/shai-hulud-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/FractalRecursion/shai-hulud-guard/actions/workflows/ci.yml) [![CodeQL](https://github.com/FractalRecursion/shai-hulud-guard/actions/workflows/codeql.yml/badge.svg)](https://github.com/FractalRecursion/shai-hulud-guard/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/FractalRecursion/shai-hulud-guard/badge)](https://securityscorecards.dev/viewer/?uri=github.com/FractalRecursion/shai-hulud-guard) [![Latest release](https://img.shields.io/github/v/release/FractalRecursion/shai-hulud-guard?sort=semver&display_name=tag)](https://github.com/FractalRecursion/shai-hulud-guard/releases/latest)
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE) [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/) [![Runtime deps: 0](https://img.shields.io/badge/runtime%20deps-0-brightgreen)](pyproject.toml) [![Tests](https://img.shields.io/badge/tests-101%20passing-brightgreen)](tests/)
 
 ---
 

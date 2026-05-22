@@ -1350,7 +1350,7 @@ def scan_lockfile(project_path: Path) -> Tuple[List[dict], int]:
         for hook in ("preinstall", "install", "postinstall", "prepare"):
             cmd = meta.get("scripts", {}).get(hook)
             if cmd:
-                for desc, risk, snippet in scan_text(cmd):
+                for desc, risk, _snippet in scan_text(cmd):
                     findings.append({"level": risk,
                                      "msg":   f"Suspicious [{hook}] in {pkg_name}: {desc}",
                                      "pkg":   pkg_name,
@@ -1904,7 +1904,7 @@ def run_scan(project_path: Path) -> int:
                     for hook in ("preinstall", "install", "postinstall", "prepare"):
                         script_val = meta.get("scripts", {}).get(hook)
                         if script_val:
-                            for desc, risk, snippet in scan_text(script_val):
+                            for desc, risk, _snippet in scan_text(script_val):
                                 fn = crit if risk == "CRITICAL" else warn
                                 fn(f"{risk} [{hook}] in {pkg_full_name}: {desc}")
                                 dim(f"Script: {script_val[:120]}")
@@ -1990,7 +1990,7 @@ def run_scan(project_path: Path) -> int:
             crit(f"CONFIRMED BAD PYPI PACKAGE: {pip_pkg}=={pip_ver}  (waves: {pip_waves})")
             total += 1
         info("Remediation:")
-        for pip_pkg, pip_ver, _ in pip_hits:
+        for pip_pkg, _pip_ver, _ in pip_hits:
             info(f"  pip uninstall {pip_pkg}  &&  pip install {pip_pkg}  (latest clean version)")
     else:
         ok("No known-compromised PyPI packages found in current Python environment")
@@ -2224,7 +2224,7 @@ def run_check(package_spec: str) -> None:
             val = scripts[hook]
             hits = scan_text(val)
             if hits:
-                for desc, risk, snippet in hits:
+                for desc, risk, _snippet in hits:
                     fn = crit if risk == "CRITICAL" else warn
                     fn(f"{risk} in [{hook}]: {desc}")
                     dim(f"Script text: {val[:150]}")
@@ -3503,7 +3503,7 @@ def collect_system_info() -> Dict[str, Any]:
         "host": {
             "hostname":  platform.node()[:120],
             "username":  os.environ.get("USER") or os.environ.get("USERNAME") or "unknown",
-            "shell":     os.path.basename(os.environ.get("SHELL", "")) or os.environ.get("ComSpec", "").rsplit(os.sep, 1)[-1] or "unknown",
+            "shell":     os.path.basename(os.environ.get("SHELL", "")) or os.environ.get("COMSPEC", "").rsplit(os.sep, 1)[-1] or "unknown",
         },
         "ci_environment": {
             "is_ci":             len(ci_signals_present) > 0,
@@ -3535,7 +3535,7 @@ def generate_diagnosis_report(
     """
     fs = [_wrap_finding(f) for f in findings]
     # Bucket findings by level for the LLM summary
-    by_level: Dict[str, List[Finding]] = {l: [] for l in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")}
+    by_level: Dict[str, List[Finding]] = {lvl: [] for lvl in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")}
     for f in fs:
         by_level.setdefault(f.level, []).append(f)
 

@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability (private disclosure)
+    url: https://github.com/FractalRecursion/shai-hulud-guard/security/advisories/new
+    about: >-
+      Do NOT open a public issue for a security vulnerability in this tool.
+      Use private vulnerability reporting — see SECURITY.md for the policy.

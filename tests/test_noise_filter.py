@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ─── Install-time files keep verbatim risk ────────────────────────────────────
 
 @pytest.mark.parametrize("setup_file", [

@@ -1,0 +1,64 @@
+name: IOC / signature submission
+description: Propose a new indicator of compromise (malicious package, version, domain, pattern, daemon path).
+labels: ["ioc", "needs-source-verification"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **Every new IOC must cite an authoritative public source.** This is a
+        forensic scanner — a wrong signature can mark a clean machine as
+        infected, and a panicked victim may then wipe it. Unsourced reports
+        (Twitter/X threads, screenshots) are not accepted. See CLAUDE.md §4.7
+        and §5.5.
+  - type: dropdown
+    id: ioc_type
+    attributes:
+      label: IOC type
+      options:
+        - Malicious package + version (KNOWN_BAD)
+        - Watchlist package, no confirmed version (KNOWN_BAD bad=[])
+        - Malicious filename (MALICIOUS_FILENAMES)
+        - Behavioural regex (MALICIOUS_PATTERNS)
+        - Persistence/daemon path (DAEMON_PATHS)
+        - C2 / exfiltration domain or endpoint
+    validations:
+      required: true
+  - type: textarea
+    id: indicator
+    attributes:
+      label: The indicator
+      description: Exact package@version, filename, regex, path, or domain.
+    validations:
+      required: true
+  - type: dropdown
+    id: source_authority
+    attributes:
+      label: Source authority (in order of preference — see §4.7)
+      options:
+        - GitHub Advisory Database (GHSA)
+        - NIST NVD (CVE)
+        - OSV (osv.dev)
+        - Datadog IOC repo / Security Labs
+        - CISA advisory
+        - Wiz / StepSecurity post-mortem
+    validations:
+      required: true
+  - type: input
+    id: source_url
+    attributes:
+      label: Source URL
+      placeholder: "https://github.com/advisories/GHSA-xxxx-xxxx-xxxx"
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Observed behaviour
+      description: What the worm does with this indicator, mapped to the attack chain if possible (docs/THREAT_MODEL.md).
+  - type: checkboxes
+    id: calibration
+    attributes:
+      label: False-positive awareness
+      options:
+        - label: I have considered whether legitimate packages could match this indicator (esp. for regex submissions — calibrate against benchmarks/run_calibration.py before merging).
+          required: true

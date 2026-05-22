@@ -53,6 +53,7 @@ extend-exclude = [
     "*.egg-info",
     ".venv",
     "venv",
+    "legacy",   # archived, unmaintained v1.1 / v2.0 — kept for reference, not linted (CLAUDE.md §1)
 ]
 
 [tool.ruff.lint]
@@ -85,7 +86,15 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RET"]
 #   E501 — line too long. The IOC pattern table is intentionally one tuple per
 #          line; breaking those across lines hurts readability of the regex +
 #          description pairing.
-ignore = ["S603", "S607", "S310", "S324", "E501"]
+#   S110 — `try`/`except`/`pass`. Deliberate and architectural: a forensic scanner
+#          must never crash because one file is unreadable or stdout cannot be
+#          reconfigured (CLAUDE.md §5.8). Best-effort scanning is the design, not
+#          an oversight — a single bad file must not abort an incident-response run.
+#   SIM105 — "use contextlib.suppress(...)". We keep explicit try/except/pass for
+#          readability in the hot scan loops; clearer than importing contextlib here.
+#   SIM102 — "combine nested ifs with `and`". Nested ifs are kept where the two
+#          conditions check conceptually distinct things and read more clearly.
+ignore = ["S603", "S607", "S310", "S324", "E501", "S110", "SIM105", "SIM102"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately use `assert`, fixture tarballs with IOC-shaped strings,
@@ -93,6 +102,9 @@ ignore = ["S603", "S607", "S310", "S324", "E501"]
 "tests/**/*.py" = ["S101", "S105", "S106", "S404", "S301", "B011"]
 # Build scripts run subprocess heavily and write generated files.
 "build.py"      = ["S404"]
+# The calibration script is a dev/CI tool, not the shipped scanner: it uses
+# `assert` for invariants and keeps typing.X / cosmetic f-strings for 3.8 parity.
+"benchmarks/**/*.py" = ["S101", "UP006", "UP045", "F541"]
 
 [tool.ruff.format]
 # Use double quotes consistently. Match the existing v1.1 and v2.0 style.

@@ -1,0 +1,9 @@
+# Default owner for everything in the repo.
+*       @FractalRecursion
+
+# Security-critical surfaces — IOC database, detection engine, and the
+# documented invariants. Changes here especially warrant careful review.
+/shai_hulud_guard.py    @FractalRecursion
+/CLAUDE.md              @FractalRecursion
+/SECURITY.md            @FractalRecursion
+/.github/               @FractalRecursion

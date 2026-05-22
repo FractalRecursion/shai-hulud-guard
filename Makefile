@@ -7,7 +7,7 @@
 
 PYTHON ?= python3
 
-.PHONY: help install test lint format check build build-v1 build-v2 clean
+.PHONY: help install test lint format check build clean
 
 help:
 	@echo "Targets:"
@@ -16,9 +16,7 @@ help:
 	@echo "  lint        ruff check ."
 	@echo "  format      ruff format ."
 	@echo "  check       ruff check . && ruff format . --check  (pre-commit gate)"
-	@echo "  build       build both v1.1 and v2.0 binaries to dist/"
-	@echo "  build-v1    build only v1.1 -> dist/shai_hulud_guard_legacy"
-	@echo "  build-v2    build only v2.0 -> dist/shai_hulud_guard"
+	@echo "  build       build dist/shai_hulud_guard binary"
 	@echo "  clean       remove build/ dist/ *.spec"
 
 install:
@@ -39,12 +37,6 @@ check:
 
 build:
 	$(PYTHON) build.py
-
-build-v1:
-	$(PYTHON) build.py --v1
-
-build-v2:
-	$(PYTHON) build.py --v2
 
 clean:
 	$(PYTHON) build.py --clean

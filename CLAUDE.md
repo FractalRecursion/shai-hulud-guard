@@ -465,36 +465,43 @@ python -m ruff format .                # format
 
 Selected rule groups: `E F W I B UP S C4 SIM RET`. The `S` (bandit-equivalent security) group is on because this is a security tool.
 
-Deliberate ignores: `S603`, `S607`, `S310`, `S324`, `E501`. Reasoning in the comment above each one in `pyproject.toml`.
+Deliberate ignores: `S603`, `S607`, `S310`, `S324`, `E501`, plus `S110` / `SIM105` / `SIM102` — best-effort `try/except/pass` is an architectural choice (a forensic scan must not crash on one unreadable file, §5.8), and the two `SIM` rules are style. Reasoning is in the comment above each in `pyproject.toml`. The archived `legacy/` tree is excluded from linting (unmaintained, §1), and `benchmarks/` has a small per-file-ignore (`assert` + typing/f-string parity).
+
+**`ruff check .` exits 0** (clean) — this is what CI enforces. Earlier the command reported residual findings; they are now either fixed (unused loop vars, ambiguous name, env-var casing, import order) or documented-ignored. Keep it at zero: if a change adds a finding, fix it or add a justified ignore in the same commit.
 
 ### 8.3 Build / packaging — PyInstaller ✅ DONE
 
 Single `.py` file *and* prebuilt single-file binary via PyInstaller:
 
 ```bash
-python build.py            # build → dist/
+python build.py            # build → dist/shai_hulud_guard[.exe] (prints sha256)
 python build.py --clean    # rm -rf build/ dist/ *.spec
 ```
 
 The canonical artefact is the source `.py` file; the binary is convenience.
+`build.py` builds **only** the canonical `shai_hulud_guard.py` (the old `--v1`/`--v2`
+split + the dead `"shai_hulud_guard V2.0.py"` path were removed); `build.ps1` and the
+`Makefile` were updated in lockstep. The release workflow consumes this script.
 
 ### 8.4 Git state
 
 - `.gitignore` — Python build/cache, venv, PyInstaller `dist/` `build/` `*.spec`, runtime-generated reports (`shai_hulud_report_*.txt`, `shai_hulud_pin_actions.txt`, `npm_safe_install.py`), editor junk, OS junk, `.env*`, `.claude/`.
 - `.gitattributes` — LF for source, CRLF for `.bat`/`.ps1`, binary blobs marked binary.
-- `main` branch, initial commit `0be0733` from previous session ("Initial commit: shai_hulud_guard v1.1.0 and v2.0.0 + project infra").
-- Current uncommitted work: v2.4 file reconciliation + scaffolding (LICENSE, SECURITY.md, CHANGELOG.md, legacy/) + pending Phase 3-6 work.
+- **Commit signing — SSH (repo-local).** `gpg.format=ssh`, `commit.gpgsign=true`, `tag.gpgsign=true`; signing key `~/.ssh/id_ed25519_shguard(.pub)` (signing-only, no passphrase for non-interactive commits); local verification via `~/.ssh/allowed_signers`. Committer email is the auto-verified GitHub noreply, so commits show **Verified** on GitHub. Commits `0be0733/cdd134a/f3e2c4c` predate signing and stay unsigned by design (rewriting them would break the hashes referenced across the docs); every commit from the productionisation commit onward is signed.
+- Branches: `release/v2.4.0` (productionised line) merged `--no-ff` into `main`; signed annotated tag **`v2.4.0`**.
+- **Remote — PUBLIC GitHub repo** `FractalRecursion/shai-hulud-guard` (public, for the portfolio/recruiter goal — **supersedes the earlier "private" instruction**).
 
-- Current uncommitted work: full v2.4 productionisation (reconciliation, scaffolding, Finding/JSON/diagnose, calibration fixes, 101-test suite, docs, benchmark). Not yet committed.
+**Project TODO — prioritised, numbered (user-requested features first, then release hardening):**
 
-**Still TODO — prioritised in `docs/SECURITY_REVIEW.md §8`:**
-
-1. **P0 — Sign releases (Sigstore/cosign + PGP) and sign commits.** Highest leverage: advances OpenSSF Scorecard Signed-Releases, NIST SSDF PS.1/PS.2, SLSA L0→L2 simultaneously. The source `.py` is itself a supply-chain link.
-2. **P0 — `.github/workflows/ci.yml`**: matrix `python-version: ["3.8","3.10","3.12"]` × `os: [ubuntu, macos, windows]` running `ruff check . && pytest && python shai_hulud_guard.py --self-test`.
-3. **P0 — `.github/workflows/release.yml`**: on tag, `python build.py` + emit SLSA provenance + SHA-256 checksums.
-4. **GitHub remote — PRIVATE per user instruction** (prior-session blocker: `gh` CLI not on Git Bash PATH; invoke via PowerShell tool — `gh repo create shai-hulud-guard --private --source . --remote origin --push`; re-verify `--private`).
-5. **P1** — fuzz harness on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages`; populate `KNOWN_BAD["advisories"]` with real GHSA IDs; `tests/test_protect.py` filesystem round-trip.
-6. Branch protection (once a second collaborator joins).
+1. **Local-file / installer scanner** — new `--scan-file <path>` mode to vet an already-downloaded artifact (`.tgz`/`.whl`/`.zip`/`.tar.gz`, best-effort on installers/scripts) *before* opening it. Reuse `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`; preserve never-execute (§5.1).
+2. **Guided one-shot removal** — new `--remove` mode consolidating `run_patch`/`generate_remediation`/`run_incident` into one safe, ordered remediation flow (honor §5.2 token-revocation ordering and §5.7 incident steps). NB: removal already exists piecemeal — this is consolidation, not net-new.
+3. **P0 — Commit/release signing.** ✅ SSH commit + tag signing DONE (see git state above); release artifacts carry SLSA build-provenance via `release.yml`. ☐ **GPG signing (learning goal):** learn + enable GPG commit/tag signing and compare the SSH vs GPG vs Sigstore trust models.
+4. **P0 — `.github/workflows/ci.yml`** ✅ DONE — matrix `os: [ubuntu, windows, macos] × py: [3.8, 3.10, 3.12]`, SHA-pinned actions, `ruff check . && pytest && --self-test`. Badge turns green on first push.
+5. **P0 — `.github/workflows/release.yml`** ✅ DONE — on tag `v*`: per-OS PyInstaller build + `SHA256SUMS` + SLSA build-provenance attestation; Release published via `gh`.
+6. **P0 — Public GitHub repo + push** (Phase B): `gh auth login` (human-gated) → register SSH key as a *signing* key (`gh ssh-key add --type signing`) → `gh repo create shai-hulud-guard --public --source . --remote origin --push` → enable branch protection on `main` (require CI) + repo topics.
+7. **P1 — Fuzz harness** on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages`; populate `KNOWN_BAD["advisories"]` with real GHSA IDs; `tests/test_protect.py` filesystem round-trip.
+8. **P2 — Enterprise directions:** SARIF output (findings in the GitHub Security tab), publish as a reusable GitHub Action / pre-commit hook, SBOM (CycloneDX/SPDX) ingestion, PyPI maintainer-drift heuristic.
+9. **Housekeeping:** update `QUICKSTART.md` to v2.4; resolve OPEN-2 maintainer-removed scoring mismatch; ruff residual-cleanup PR.
 
 ### 8.5 Documentation surface
 
@@ -505,6 +512,20 @@ The canonical artefact is the source `.py` file; the binary is convenience.
 - `docs/RUFF.md` — ruff rule-group explainer.
 - `docs/SESSION_STATE.md` — point-in-time session handoff (verbatim detection logic, calibration numbers, open issues, exact next action). Snapshot as of commit `cdd134a`; may go stale — trust the code + this CLAUDE.md over it if they diverge.
 - `benchmarks/run_calibration.py` + `BENCHMARKS.md` — live-registry top-50 npm + top-50 PyPI scoring, **pinned to stable versions** for reproducibility (no publish-age noise).
+
+### 8.6 CI / GitHub workflows & community files ✅ NEW
+
+All GitHub Actions are **SHA-pinned** (not tag-pinned) — dogfooding the action-poisoning defence the tool itself detects; Dependabot bumps the pins.
+
+- `.github/workflows/ci.yml` — matrix CI (ruff + pytest + `--self-test`); macOS 3.8 covered via the `macos-13` Intel runner (arm64 `macos-latest` has no 3.8).
+- `.github/workflows/release.yml` — tag-triggered per-OS build + `SHA256SUMS` + SLSA build-provenance (`actions/attest-build-provenance`); Release via `gh`.
+- `.github/workflows/codeql.yml` — CodeQL code scanning (python, `security-and-quality`).
+- `.github/workflows/scorecard.yml` — OpenSSF Scorecard (`publish_results: true` → README badge + SARIF to code-scanning).
+- `.github/dependabot.yml` — weekly `github-actions` + `pip`(dev) update PRs.
+- `.github/ISSUE_TEMPLATE/{bug_report,ioc_report,feature_request}.yml` + `config.yml` — the IOC template enforces the §4.7 cited-source rule; `config.yml` routes vulns to private reporting.
+- `.github/PULL_REQUEST_TEMPLATE.md` — checklist mirrors the §5 invariants + the calibration gate.
+- `.github/CODEOWNERS`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`.
+- README badges: live CI / CodeQL / OpenSSF Scorecard / latest-release (the old hardcoded "self-test 6/6" badge was removed in favour of the live CI badge).
 
 ---
 

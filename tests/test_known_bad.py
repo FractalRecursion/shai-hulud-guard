@@ -8,7 +8,6 @@ restructure during an IOC update doesn't silently break the consumers
 """
 from __future__ import annotations
 
-
 # ─── MALICIOUS_FILENAMES ──────────────────────────────────────────────────────
 
 def test_malicious_filenames_is_a_set(guard):

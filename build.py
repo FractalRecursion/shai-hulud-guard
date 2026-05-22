@@ -2,36 +2,36 @@
 """
 build.py — Cross-platform PyInstaller build for shai_hulud_guard.
 
-Produces single-file binaries (.exe on Windows, no-extension on Linux/macOS)
-for BOTH versions of the tool:
-
-  - shai_hulud_guard            ← v2.0 (interactive, recommended)
-  - shai_hulud_guard_legacy     ← v1.1 (flag-based, scriptable for CI)
-
-Both end up in ./dist/ alongside ./build/ scratch directories.
+Produces a single-file binary (``shai_hulud_guard[.exe]``) from the canonical
+v2.4 single-file CLI ``shai_hulud_guard.py``. The binary lands in ``./dist/``
+with ``./build/`` as the scratch directory.
 
 Usage:
-  python build.py             # build both
-  python build.py --v1        # build only v1.1 -> shai_hulud_guard_legacy[.exe]
-  python build.py --v2        # build only v2.0 -> shai_hulud_guard[.exe]
-  python build.py --clean     # remove build/ dist/ *.spec, then exit
+  python build.py            # build dist/shai_hulud_guard[.exe]
+  python build.py --clean    # remove build/ dist/ *.spec, then exit
 
-Why we use PyInstaller (and not Nuitka):
+The canonical artifact is the source ``shai_hulud_guard.py`` itself (stdlib
+only, runs on any Python 3.8+). The binary is a convenience for users who do
+not have Python installed.
+
+Why PyInstaller (and not Nuitka):
   - Single dev dependency, well-known, stable.
   - --onefile produces ONE artifact for users with no Python installed.
   - The runtime cost (a few MB and a brief unpack at start) is acceptable
-    for an incident-response tool that runs interactively.
+    for an incident-response tool.
 
 Determinism / reproducibility caveat:
-  PyInstaller bundles a copy of the Python interpreter + stdlib. The exact
-  bytes therefore depend on the build machine's Python build. For genuinely
-  reproducible binaries you would need to pin Python version + PyInstaller
-  version + run in a fresh container. We do not do that here — but the
-  source .py file IS the canonical artifact; the binary is a convenience.
+  PyInstaller bundles a copy of the Python interpreter + stdlib, so the exact
+  bytes depend on the build machine's Python build. The release workflow
+  (.github/workflows/release.yml) publishes a SHA-256 checksum (and SLSA
+  provenance) for every artifact so users can verify what they downloaded.
+  The source .py file remains the canonical artifact; the binary is a
+  convenience.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import platform
 import shutil
 import subprocess
@@ -39,12 +39,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-V1_PATH = ROOT / "shai_hulud_guard.py"
-V2_PATH = ROOT / "shai_hulud_guard V2.0.py"
+GUARD_PATH = ROOT / "shai_hulud_guard.py"
 
-# Output binary basenames (PyInstaller appends .exe on Windows automatically).
-V1_NAME = "shai_hulud_guard_legacy"
-V2_NAME = "shai_hulud_guard"
+# Output binary basename (PyInstaller appends .exe on Windows automatically).
+GUARD_NAME = "shai_hulud_guard"
 
 
 def _ensure_pyinstaller() -> None:
@@ -57,11 +55,23 @@ def _ensure_pyinstaller() -> None:
         sys.exit(2)
 
 
+def _exe_suffix() -> str:
+    return ".exe" if platform.system() == "Windows" else ""
+
+
 def _platform_tag() -> str:
     sysname = platform.system().lower()      # 'windows' | 'darwin' | 'linux'
-    arch    = platform.machine().lower()     # 'amd64' | 'x86_64' | 'arm64' | ...
+    arch = platform.machine().lower()        # 'amd64' | 'x86_64' | 'arm64' | ...
     arch_norm = {"amd64": "x86_64"}.get(arch, arch)
     return f"{sysname}_{arch_norm}"
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _run_pyinstaller(script: Path, name: str) -> Path:
@@ -77,7 +87,6 @@ def _run_pyinstaller(script: Path, name: str) -> Path:
         "--clean",
         "--noconfirm",
         "--name", name,
-        # Strip platform-specific output dirs (default is dist/ build/ — kept).
         str(script),
     ]
     print(f"[build] Building {script.name}  ->  dist/{name}{_exe_suffix()}")
@@ -94,27 +103,21 @@ def _run_pyinstaller(script: Path, name: str) -> Path:
     return out
 
 
-def _exe_suffix() -> str:
-    return ".exe" if platform.system() == "Windows" else ""
-
-
 def _clean() -> None:
     for d in ("build", "dist"):
         p = ROOT / d
         if p.exists():
-            print(f"[build] rm -rf {p}")
+            print(f"[build] removing {p}")
             shutil.rmtree(p, ignore_errors=True)
     for spec in ROOT.glob("*.spec"):
-        print(f"[build] rm {spec}")
+        print(f"[build] removing {spec}")
         spec.unlink()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="PyInstaller build for shai_hulud_guard")
-    g = parser.add_mutually_exclusive_group()
-    g.add_argument("--v1",    action="store_true", help="build only v1.1 -> shai_hulud_guard_legacy")
-    g.add_argument("--v2",    action="store_true", help="build only v2.0 -> shai_hulud_guard")
-    g.add_argument("--clean", action="store_true", help="remove build/ dist/ *.spec and exit")
+    parser.add_argument("--clean", action="store_true",
+                        help="remove build/ dist/ *.spec and exit")
     args = parser.parse_args()
 
     if args.clean:
@@ -127,20 +130,16 @@ def main() -> int:
     print(f"[build] Python:   {sys.version.split()[0]}")
     print()
 
-    built: list[Path] = []
-    if args.v1 or not args.v2:
-        built.append(_run_pyinstaller(V1_PATH, V1_NAME))
-    if args.v2 or not args.v1:
-        built.append(_run_pyinstaller(V2_PATH, V2_NAME))
+    out = _run_pyinstaller(GUARD_PATH, GUARD_NAME)
 
     print()
-    print("[build] Done. Artifacts:")
-    for b in built:
-        if b.exists():
-            size_mb = b.stat().st_size / (1024 * 1024)
-            print(f"[build]   {b}  ({size_mb:.1f} MB)")
-        else:
-            print(f"[build]   {b}  (NOT FOUND — see PyInstaller output above)")
+    print("[build] Done. Artifact:")
+    if out.exists():
+        size_mb = out.stat().st_size / (1024 * 1024)
+        print(f"[build]   {out}  ({size_mb:.1f} MB)")
+        print(f"[build]   sha256: {_sha256(out)}")
+    else:
+        print(f"[build]   {out}  (NOT FOUND — see PyInstaller output above)")
     return 0
 
 

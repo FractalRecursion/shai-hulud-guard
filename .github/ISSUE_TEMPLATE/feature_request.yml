@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a new mode, detection, or improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What can't you do today? Who is the user (developer pre-install, incident responder, CI pipeline)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariant check (see CLAUDE.md §5)
+      description: This tool keeps hard safety invariants. Confirm your idea respects them.
+      options:
+        - label: Does not require executing target package code (§5.1).
+        - label: Does not auto-revoke/rotate credentials or read credential contents (§5.2 / §5.3).
+        - label: Does not add a runtime dependency or phone home (§5.4 / stdlib-only).

@@ -1,0 +1,52 @@
+name: Bug report
+description: A defect in the scanner — wrong verdict, crash, or broken behaviour.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for reporting. **If this is a false positive/negative on a
+        specific package**, please include the exact `--check`/`--scan` command
+        and output — calibration accuracy is a core invariant of this project.
+  - type: input
+    id: version
+    attributes:
+      label: Tool version
+      description: Output of `python shai_hulud_guard.py --version`.
+      placeholder: "shai_hulud_guard 2.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Linux, macOS, Windows, Other]
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command run
+      render: shell
+      placeholder: "python shai_hulud_guard.py --check some-package@1.2.3"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected vs. what happened
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output (redact any secrets)
+      description: Paste the relevant output. NEVER paste tokens, credentials, or file contents.
+      render: text
