@@ -14,7 +14,7 @@ Single-folder Python project, **runtime stdlib only**, Python 3.8+, runs on **Li
 Shai_Hulud_Guard/
 ├── CLAUDE.md                  ← this file (instructions to Claude Code)
 ├── README.md                  ← user-facing docs
-├── QUICKSTART.md              ← user-facing quick-start (TODO: update for v2.4)
+├── QUICKSTART.md              ← user-facing quick-start (v2.4 flag-based CLI)
 ├── CHANGELOG.md               ← version history
 ├── LICENSE                    ← GPL-3.0
 ├── SECURITY.md                ← disclosure policy + project-is-defensive note
@@ -42,6 +42,9 @@ Shai_Hulud_Guard/
 ├── benchmarks/                ← (Phase 5C) live-registry FP/TP measurement
 │   ├── run_calibration.py
 │   └── BENCHMARKS.md
+│
+├── tools/                     ← maintainer-only dev tooling (NEVER run by the scanner)
+│   └── refresh_advisories.py  ← refresh KNOWN_BAD advisories from OSV.dev
 │
 ├── legacy/                    ← archived, NOT maintained
 │   ├── README.md              ← what's here and why
@@ -136,7 +139,7 @@ Demotes findings by path class so a real malicious payload in *executing* source
 1. Install-time files (`setup.py`, `package.json`, `preinstall.js`, `postinstall.js`, `install.js`) retain their original risk — these are the actual install-time attack surface, never demoted.
 2. **Non-executing dirs** (`_NOEXEC_DIRS` — tests AND CI: `/test/`, `/tests/`, `/__tests__/`, `/spec/`, `/test_`, `/fixtures/`, `/mocks/`, `/stubs/`, `/.github/`, `/.circleci/`, `/.travis`, `/appveyor`, `/ci/`, `/.evergreen/`, `/.azure-pipelines/`, `/.buildkite/`, `/.gitlab/`, `/.teamcity/`, `/.azure/`) **and non-executing files** (`_NOEXEC_FILES` — root-level CI configs by basename: `azure-pipelines.yml`, `.travis.yml`, `.gitlab-ci.yml`, `appveyor.yml`, `tox.ini`, `noxfile.py`, `conftest.py`): code here does NOT run during `npm install` / `pip install`. Demote **`CRITICAL → MEDIUM`** (visible at +4, can't hard-block a legit package), suppress everything below CRITICAL to `LOW`.
 3. `CRITICAL` outside non-executing dirs always passes through.
-4. **Soft-noise dirs** (`_NOISE_DIRS` — `/doc/`, `/docs/`, `/_static/`, `/examples/`, `/demo/`, `/vendor/`, `/vendored/`, `/third_party/`, `/thirdparty/`, `/external/`): demote one level (`HIGH → MEDIUM`, `MEDIUM → LOW`); `CRITICAL` stays (vendored code can be imported). Caller drops `LOW`.
+4. **Soft-noise dirs** (`_NOISE_DIRS` — `/doc/`, `/docs/`, `/_static/`, `/examples/`, `/demo/`, `/tools/`, `/vendor/`, `/vendored/`, `/third_party/`, `/thirdparty/`, `/external/`): demote one level (`HIGH → MEDIUM`, `MEDIUM → LOW`); `CRITICAL` stays (vendored / `tools/` code can be imported). Caller drops `LOW`. (`/tools/` = release/dev scripts shipped in sdists but not run on install — e.g. matplotlib `tools/gh_api.py`.)
 
 Rationale + the calibration cases that drove the CRITICAL→MEDIUM demotion (Pillow, pymongo, virtualenv) are in `docs/DESIGN.md §2.5`. Regression-guarded by `tests/test_noise_filter.py`. The PyPI path uses this same shared filter (no separate inline copy).
 
@@ -211,7 +214,7 @@ Dict `{ package_name: {"bad": [versions], "waves": [wave_tags], "advisories": [i
 Semantics:
 - `bad: ["1.169.5"]` — install of this exact version triggers `CRITICAL` and stops `run_check` at risk = 100.
 - `bad: []` — high-scrutiny watchlist; targeted before but no version confirmed malicious yet. `run_check` adds +15 and emits `MEDIUM`.
-- `advisories: ["GHSA-…"]` — optional list of authoritative advisory IDs (GitHub Advisory Database, NVD CVE, OSV). Surfaced in `--json` output for downstream tooling and LLM analysis. Empty list when no public advisory has been published yet.
+- `advisories: ["GHSA-…"]` — authoritative advisory IDs (GHSA preferred; NVD CVE / OSV). Surfaced in `--json` output for downstream tooling and LLM analysis. **Populated from OSV.dev** and kept current by `tools/refresh_advisories.py` (maintainer-only — the scanner never queries OSV at runtime, §5.4). Record only the supply-chain / malicious-code advisory matching the `bad` version (exclude unrelated CVEs). Empty list = none cross-referenced yet.
 
 `waves` is a free-form list of human tags (`"Wave5-May2026"`) used in report copy.
 
@@ -425,14 +428,14 @@ python shai_hulud_guard.py --unprotect --path /tmp/sandbox
 
 ## 8. Project infrastructure — status
 
-### 8.1 Test suite — `tests/` ✅ UPDATED FOR v2.4 (101 tests passing)
+### 8.1 Test suite — `tests/` ✅ UPDATED FOR v2.4 (104 tests passing)
 
 The pytest suite covers the canonical v2.4 module via the `guard` fixture
 (`tests/conftest.py` loads root `shai_hulud_guard.py` via importlib; optional
 `legacy_v1`/`legacy_v2` fixtures load `legacy/` files and skip if pruned).
 
 ```bash
-python -m pytest                  # 101 tests, ~0.3s
+python -m pytest                  # 104 tests, ~0.3s
 python -m pytest -v               # per-test names
 ```
 
@@ -493,15 +496,15 @@ split + the dead `"shai_hulud_guard V2.0.py"` path were removed); `build.ps1` an
 
 **Project TODO — prioritised, numbered (user-requested features first, then release hardening):**
 
-1. **Local-file / installer scanner** — new `--scan-file <path>` mode to vet an already-downloaded artifact (`.tgz`/`.whl`/`.zip`/`.tar.gz`, best-effort on installers/scripts) *before* opening it. Reuse `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`; preserve never-execute (§5.1).
-2. **Guided one-shot removal** — new `--remove` mode consolidating `run_patch`/`generate_remediation`/`run_incident` into one safe, ordered remediation flow (honor §5.2 token-revocation ordering and §5.7 incident steps). NB: removal already exists piecemeal — this is consolidation, not net-new.
+1. **⭐ CRITICAL — one-command removal of infected packages (`--remove`).** After `--scan` finds infection, remove it safely in ONE command. Thin orchestrator over existing `run_scan`/`classify_infection`/`generate_remediation`/`_write_cleanup_script`/`_write_daemon_script`. **Load-bearing safe order:** (1) remove persistence daemon FIRST (§5.2 kill-switch wipes `~/`), (2) remove infected packages by **deleting `node_modules/<pkg>` directly** / `pip uninstall -y` — for npm use `--ignore-scripts` so a malicious uninstall hook can't execute (§5.1), (3) delete payload files, (4) NEVER auto-revoke creds — print the manual rotation checklist after, (5) audit/rebuild guidance. Add `run_remove()` near `run_patch` (~L2584) + `--remove` in `main()`; `tests/test_remove.py`. Full design in `docs/SESSION_STATE.md §5`.
+2. **Local-file / installer scanner** — new `--scan-file <path>` mode to vet an already-downloaded artifact (`.tgz`/`.whl`/`.zip`/`.tar.gz`, best-effort on installers/scripts) *before* opening it. Reuse `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`; preserve never-execute (§5.1).
 3. **P0 — Commit/release signing.** ✅ SSH commit + tag signing DONE (see git state above); release artifacts carry SLSA build-provenance via `release.yml`. ☐ **GPG signing (learning goal):** learn + enable GPG commit/tag signing and compare the SSH vs GPG vs Sigstore trust models.
 4. **P0 — `.github/workflows/ci.yml`** ✅ DONE — matrix `os: [ubuntu, windows, macos] × py: [3.8, 3.10, 3.12]`, SHA-pinned actions, `ruff check . && pytest && --self-test`. Badge turns green on first push.
 5. **P0 — `.github/workflows/release.yml`** ✅ DONE — on tag `v*`: per-OS PyInstaller build + `SHA256SUMS` + SLSA build-provenance attestation; Release published via `gh`.
 6. **P0 — Public GitHub repo + push** (Phase B): `gh auth login` (human-gated) → register SSH key as a *signing* key (`gh ssh-key add --type signing`) → `gh repo create shai-hulud-guard --public --source . --remote origin --push` → enable branch protection on `main` (require CI) + repo topics.
-7. **P1 — Fuzz harness** on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages`; populate `KNOWN_BAD["advisories"]` with real GHSA IDs; `tests/test_protect.py` filesystem round-trip.
+7. **P1 — Fuzz harness** on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages`; `tests/test_protect.py` filesystem round-trip. *(KNOWN_BAD advisory population ✅ DONE — OSV-sourced GHSA IDs + `tools/refresh_advisories.py`.)*
 8. **P2 — Enterprise directions:** SARIF output (findings in the GitHub Security tab), publish as a reusable GitHub Action / pre-commit hook, SBOM (CycloneDX/SPDX) ingestion, PyPI maintainer-drift heuristic.
-9. **Housekeeping:** update `QUICKSTART.md` to v2.4; resolve OPEN-2 maintainer-removed scoring mismatch; ruff residual-cleanup PR.
+9. **Housekeeping:** ruff residual-cleanup PR. *(QUICKSTART→v2.4 ✅ DONE; OPEN-2 maintainer-scoring mismatch ✅ FIXED; matplotlib FP & subprocess split ✅ DONE — see DESIGN §2.9.)*
 
 ### 8.5 Documentation surface
 

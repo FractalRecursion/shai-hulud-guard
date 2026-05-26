@@ -194,13 +194,24 @@ MALICIOUS_PATTERNS: List[Tuple[str, str, str]] = [
     (r"(?<!\w)\.env(?!\w)",                        ".env file access",                           "MEDIUM"),
     (r"\bexec\s*\(\s*[\"'`][^\"'`]{4,}",          "Shell exec with string literal",             "MEDIUM"),
     # ── Python / PyPI specific ────────────────────────────────────────────────
-    # HIGH not CRITICAL: legitimate native-extension build helpers (matplotlib
-    # setupext.py, numpy, scipy) spawn curl/sh/bash to fetch & compile C deps.
-    # Strong signal, but not definitive compromise — the definitive CRITICALs
-    # (home wipe, C2 domains, token literals, reverse shells, /proc/pid/mem)
-    # remain CRITICAL. See docs/DESIGN.md § 2.x and the matplotlib calibration case.
-    (r"subprocess\.\w+\s*\(\s*\[?\s*['\"](?:curl|wget|bash|sh|powershell|cmd\.exe)",
-                                                   "Subprocess spawning downloader/shell in package",  "HIGH"),
+    # Subprocess analysis is SPLIT BY INTENT. The single old pattern flagged any
+    # `subprocess.run(["sh"|"bash"|"curl"…])` as HIGH, which over-scored every
+    # native-extension build: matplotlib setupext.py runs `["sh","./autogen.sh"]`,
+    # numpy/scipy/lxml/pillow shell out to configure/make. Running a LOCAL build
+    # script is not the worm's behaviour — download-pipe-execute is. So:
+    #   (a) a network downloader (curl/wget) spawned from a package  → HIGH
+    #   (b) a shell carrying a download / pipe-to-shell / remote `-c` / reverse
+    #       shell / encoded payload                                   → HIGH
+    #   (c) a BARE local shell interpreter (build step?)              → MEDIUM
+    # Definitive CRITICALs (home wipe, C2, token literals, reverse shells,
+    # /proc/pid/mem) keep their own patterns. See docs/DESIGN.md § 2.9.
+    (r"subprocess\.\w+\s*\(\s*\[?\s*['\"](?:[^'\"\s]*[/\\])?(?:curl|wget)\b",
+                                                   "Subprocess spawning network downloader in package", "HIGH"),
+    (r"subprocess\.\w+\s*\(\s*\[?\s*['\"](?:[^'\"\s]*[/\\])?(?:bash|sh|zsh|powershell|pwsh|cmd(?:\.exe)?)\b"
+     r"[^)]{0,200}(?:-c\b|-i\b|curl|wget|https?://|\|\s*(?:ba)?sh\b|Invoke-Expression|iex\b|-enc\b|FromBase64)",
+                                                   "Subprocess spawning shell with download/pipe/remote payload", "HIGH"),
+    (r"subprocess\.\w+\s*\(\s*\[?\s*['\"](?:[^'\"\s]*[/\\])?(?:bash|sh|zsh|powershell|pwsh|cmd(?:\.exe)?)\b",
+                                                   "Subprocess spawning shell interpreter in package (build step?)", "MEDIUM"),
     (r"os\.system\s*\(\s*['\"](?:curl|wget|rm\s+-rf|del\s+/|bash\s+-[ci])",
                                                    "os.system with dangerous command in setup",   "CRITICAL"),
     (r"__import__\s*\(\s*['\"]os['\"]",            "Dynamic os import (obfuscation pattern)",     "HIGH"),
@@ -221,23 +232,27 @@ MALICIOUS_PATTERNS: List[Tuple[str, str, str]] = [
 #               2. NVD   (https://nvd.nist.gov/)          ← when a CVE is issued
 #               3. OSV   (https://osv.dev/)               ← unified aggregator
 #
-# Note on empty advisories:
-#   v2.4 introduces the `advisories` field as scaffolding. Population is
-#   deliberately deferred to a future minor pending careful manual lookup
-#   per entry against GHSA. Empty list here means "no advisory ID cross-
-#   referenced yet" — not "no public advisory exists". Users seeking the
-#   GHSA ID for a specific package should query the GitHub Advisory
-#   Database directly. See CHANGELOG.md § 2.4.0.
+# Advisory population & sustainable updates:
+#   `advisories` cross-references each entry to authoritative supply-chain
+#   advisories — GitHub Advisory Database (GHSA) IDs, verified via OSV.dev
+#   (osv.dev aggregates GHSA + NVD + the npm/PyPI malware feeds). Only the
+#   malicious-code / compromise advisory matching the `bad` version is listed —
+#   NOT unrelated CVEs in the same package (e.g. guardrails-ai's older XXE/RCE
+#   CVEs are deliberately excluded; only the 0.10.1 supply-chain advisory is).
+#   To refresh or extend this mapping, a MAINTAINER runs
+#   `python tools/refresh_advisories.py` — an offline tool, NEVER the scanner
+#   (the scanner must not phone home: CLAUDE.md §5.4). Empty list = no published
+#   supply-chain advisory cross-referenced yet. See CLAUDE.md §4.3 / §4.7.
 KNOWN_BAD: Dict[str, dict] = {
-    "@tanstack/react-router":  {"bad": ["1.169.5"], "waves": ["Wave5-May2026"], "advisories": []},
-    "@tanstack/router":        {"bad": ["1.169.5"], "waves": ["Wave5-May2026"], "advisories": []},
+    "@tanstack/react-router":  {"bad": ["1.169.5"], "waves": ["Wave5-May2026"], "advisories": ["GHSA-5q7g-gw3w-r3rh", "GHSA-g7cv-rxg3-hmpx"]},
+    "@tanstack/router":        {"bad": ["1.169.5"], "waves": ["Wave5-May2026"], "advisories": ["GHSA-g7cv-rxg3-hmpx"]},
     "@tanstack/react-query":   {"bad": [],           "waves": ["Wave5-May2026"], "advisories": []},
     "@mistralai/mistralai":    {"bad": [],           "waves": ["Wave5-May2026"], "advisories": []},
     "@uipath/apollo-core":     {"bad": [],           "waves": ["Wave5-May2026"], "advisories": []},
-    "guardrails-ai":           {"bad": ["0.10.1"],   "waves": ["Wave5-May2026"], "advisories": []},
-    "mistralai":               {"bad": ["2.4.6"],    "waves": ["Wave5-May2026"], "advisories": []},
+    "guardrails-ai":           {"bad": ["0.10.1"],   "waves": ["Wave5-May2026"], "advisories": ["GHSA-xmpw-2vmm-p4p6"]},
+    "mistralai":               {"bad": ["2.4.6"],    "waves": ["Wave5-May2026"], "advisories": ["GHSA-wx9m-wx4f-4cmg"]},
     "@bitwarden/cli":          {"bad": [],           "waves": ["Wave4-Apr2026"], "advisories": []},
-    "intercom-client":         {"bad": ["7.0.4"],    "waves": ["Wave5-May2026"], "advisories": []},
+    "intercom-client":         {"bad": ["7.0.4"],    "waves": ["Wave5-May2026"], "advisories": ["GHSA-54pg-9963-v8vg", "GHSA-4594-wxqv-j3pm"]},
     # gh-token-monitor is the persistence-daemon NAME the worm installs
     # (Linux systemd / macOS LaunchAgent / Windows Task Scheduler entry).
     # It is NOT a published-and-removed npm package — it is the artefact left
@@ -245,8 +260,11 @@ KNOWN_BAD: Dict[str, dict] = {
     # consistently as a Shai-Hulud indicator. See docs/THREAT_MODEL.md for the
     # attack chain explaining where this name comes from.
     "gh-token-monitor":        {"bad": [],           "waves": ["Wave1-Sep2025", "Wave5-May2026"], "advisories": []},
-    "tinycolor2":              {"bad": [],           "waves": ["Wave1-Sep2025"], "advisories": []},
-    "@asyncapi/cli":           {"bad": [],           "waves": ["Wave2-Nov2025"], "advisories": []},
+    # @ctrl/tinycolor (NOT the unrelated `tinycolor2` package) was the actually
+    # compromised package in the Sep-2025 Wave-1 worm — confirmed via OSV and the
+    # cited StepSecurity "ctrl-tinycolor" post-mortem (CLAUDE.md §4.7 source 8).
+    "@ctrl/tinycolor":         {"bad": ["4.1.1", "4.1.2"], "waves": ["Wave1-Sep2025"], "advisories": ["GHSA-qjqf-7j6f-82c4"]},
+    "@asyncapi/cli":           {"bad": [],           "waves": ["Wave2-Nov2025"], "advisories": ["GHSA-w364-4jj5-wj22"]},
 }
 
 HIGH_VALUE_TARGETS = set(KNOWN_BAD.keys()) | {
@@ -678,11 +696,13 @@ _NOEXEC_FILES = (
     "tox.ini", "noxfile.py", "conftest.py",
 )
 
-# Soft-noise directories: docs, examples, vendored deps. Vendored code CAN be
-# imported and executed, so these get a milder one-level demotion (HIGH→MEDIUM)
-# and CRITICAL still passes through.
+# Soft-noise directories: docs, examples, vendored deps, and dev/release
+# tooling. `/tools/` holds scripts shipped in the sdist but NOT run on install
+# (matplotlib `tools/gh_api.py`, numpy/scipy/pandas release helpers). Vendored
+# code CAN be imported and executed, so these get a milder one-level demotion
+# (HIGH→MEDIUM, MEDIUM→LOW) and CRITICAL still passes through.
 _NOISE_DIRS = (
-    "/doc/", "/docs/", "/_static/", "/examples/", "/demo/",
+    "/doc/", "/docs/", "/_static/", "/examples/", "/demo/", "/tools/",
     "/vendor/", "/vendored/", "/third_party/", "/thirdparty/", "/external/",
 )
 
@@ -2189,7 +2209,11 @@ def run_check(package_spec: str) -> None:
         _any_heuristic = True
         fn = crit if risk == "CRITICAL" else warn
         fn(desc)
-        risk_score += 20 if risk == "HIGH" else 10
+        # Score by exact level: a *removed* maintainer is LOW/informational (+0);
+        # an *added* maintainer is MEDIUM (+10, the worm's account-takeover
+        # vector); +20 reserved for a future HIGH. Fixes the OPEN-2 doc/code
+        # mismatch where LOW fell through the old `if HIGH else 10` to +10.
+        risk_score += {"HIGH": 20, "MEDIUM": 10, "LOW": 0}.get(risk, 0)
         findings.append((risk, desc))
     _gap = check_version_gap(meta, requested_version)
     if _gap:

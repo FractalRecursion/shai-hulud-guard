@@ -1,241 +1,125 @@
 # shai_hulud_guard — Quick Start
 
-> **Current version: v2.0.0** — interactive scanner, auto-fixer, hardening assistant, and LLM diagnosis reporter.
-> See [v1.1 reference](#v11--previous-version) at the bottom for the flag-based CLI.
+> **Current version: v2.4.0** — single-file, stdlib-only CLI scanner, hardener, and
+> proactive-defence tool for the Shai-Hulud npm / PyPI supply-chain worm family.
+> Flag-based (no interactive menu — fully scriptable / CI-friendly).
 
----
-
-## What it is
-
-A single-file Python tool that walks you through detecting, removing, and preventing the **Shai-Hulud npm supply-chain worm** (all waves, September 2025 → present). No installation required. No external dependencies. Zero code execution from target packages.
+For the full reference see **[README.md](README.md)**; for the design rationale see **[docs/DESIGN.md](docs/DESIGN.md)**.
 
 ---
 
 ## Requirements
 
-- Python 3.8+ (standard library only — zero `pip install`)
-- Internet access for pre-install checks (queries npm registry)
-- Linux, macOS, or Windows
+- **Python 3.8+** — standard library only, zero `pip install` for the runtime tool.
+- **Internet access** for pre-install checks (queries the npm / PyPI registries only — no telemetry).
+- **Linux, macOS, or Windows.**
 
 ---
 
-## Install and run
+## Get it
 
-**Option A — run directly**
+**Option A — run the script directly (recommended)**
 ```bash
-curl -O https://raw.githubusercontent.com/<your-repo>/main/shai_hulud_guard.py
-python shai_hulud_guard.py
+curl -O https://raw.githubusercontent.com/FractalRecursion/shai-hulud-guard/main/shai_hulud_guard.py
+python shai_hulud_guard.py --self-test      # 6/6 assertions, ~2s, proves it works
 ```
 
-**Option B — shell installer (Linux/macOS)**
+**Option B — prebuilt single-file binary (no Python needed)**
+Download the binary for your OS from the [Releases page](https://github.com/FractalRecursion/shai-hulud-guard/releases/latest)
+(each asset ships with a `SHA256SUMS` file + SLSA build provenance — verify before running), or build it yourself:
 ```bash
-bash install.sh
-shai_hulud_guard   # works from anywhere after restart
-```
-
-**Option C — Windows**
-```
-install.bat        # installs to %APPDATA%, adds to PATH
-```
-
-**Option D — prebuilt binary (no Python needed)**
-```bash
-# Linux x86-64:
-chmod +x dist/shai_hulud_guard_linux_x86_64
-./dist/shai_hulud_guard_linux_x86_64
-
-# Build for your OS:
-pip install pyinstaller
-pyinstaller --onefile --name shai_hulud_guard shai_hulud_guard.py
+pip install -e ".[dev]"   # installs PyInstaller, pytest, ruff
+python build.py            # -> dist/shai_hulud_guard[.exe]
 ```
 
 ---
 
-## The session flow
-
-Launch and the tool guides you through a complete session:
+## The lifecycle — one flag per stage
 
 ```
-SCAN (6 checks) → VIEW FINDINGS → AUTO-FIX (100% safe) → PROTECT (tradeoffs disclosed) → DIAGNOSE (LLM report)
+   PREVENT          DETECT             RESPOND          HARDEN
+   ───────          ──────             ───────          ──────
+   --check     →    --scan       →    --patch     →    --protect
+   --check-pypi     --lockcheck       --verify         --unprotect
+                    --self-test       --diagnose
 ```
 
 ```bash
-python shai_hulud_guard.py              # scan current directory
-python shai_hulud_guard.py --path ~/app # scan a specific project
+# PREVENT — vet a package BEFORE installing (exit 1 if risk ≥ 40 → blocks install in a wrapper)
+python shai_hulud_guard.py --check        <pkg>[@<version>]      # npm
+python shai_hulud_guard.py --check-pypi   <pkg>[==<version>]     # PyPI
+
+# DETECT — inspect a project you already have
+python shai_hulud_guard.py --scan      --path .
+python shai_hulud_guard.py --lockcheck --path .                  # audit lockfile entries
+python shai_hulud_guard.py --diagnose  --path .                  # writes an LLM-paste-ready report
+
+# RESPOND — remediate (token-revocation ordering is enforced; see warning below)
+python shai_hulud_guard.py --patch --path .                      # generate per-case remediation scripts
+python shai_hulud_guard.py --patch --path . --auto               # run them after confirmation
+python shai_hulud_guard.py --incident                            # 8-step incident-response guide
+
+# HARDEN — install reversible proactive defences (use a disposable path while testing!)
+python shai_hulud_guard.py --protect --path .  [--setup-alias] [--setup-npmrc] [--setup-cron]
+python shai_hulud_guard.py --unprotect --path .                  # removes exactly what --protect added
+
+# Add --json to any mode for machine-readable output (CI / LLM ingestion)
+python shai_hulud_guard.py --check react --json
 ```
 
 ---
 
-## Interactive menu map
-
-```
-Main menu
-├── [1] Full scan
-│   └── Post-scan menu
-│       ├── [D] Detailed findings (paths, patterns, script content)
-│       ├── [F] Auto-fix           ← daemon removal + payload file deletion
-│       ├── [P] Proactive protections (4 options, each with tradeoffs)
-│       ├── [R] Diagnosis report   → save .txt and paste into LLM
-│       ├── [C] Pre-install check for a package
-│       ├── [I] Incident response guide
-│       └── [M] Main menu
-├── [2] Pre-install check
-├── [3] Incident response guide
-└── [Q] Quit
-```
-
----
-
-## Non-interactive (scripts and CI)
-
-```bash
-python shai_hulud_guard.py --check lodash
-python shai_hulud_guard.py --check @tanstack/react-router@1.169.5
-# returns exit 0 (clean/low risk) or prints risk score and findings
-```
-
----
-
-## What the scan checks
+## What `--scan` checks
 
 | # | Check | What it catches |
 |---|---|---|
-| 1 | **Persistence daemon** | `gh-token-monitor` service file — definitive infection confirmation |
-| 2 | **package.json audit** | Confirmed bad versions; non-registry deps bypassing `--ignore-scripts` |
-| 3 | **Lock file + npmrc** | Missing lock file; no age-gate configured |
-| 4 | **node\_modules scan** | Payload filenames; malicious lifecycle script patterns |
-| 5 | **Credential inventory** | Which credential files the worm targets are on disk (names only) |
-| 6 | **GitHub Actions audit** | `pull_request_target` + cache (Wave 5 entry); OIDC scope; tag-pinned actions |
+| 1 | **Persistence daemon** | `gh-token-monitor` service/agent — definitive infection confirmation |
+| 2 | **Manifest audit** | Confirmed-bad versions (`KNOWN_BAD`); non-registry deps; lifecycle hooks |
+| 3 | **Lockfile + `.npmrc`** | Tampered lockfile entries; integrity-mismatch signals |
+| 4 | **`node_modules` scan** | Payload filenames (`router_init.js`, …); malicious lifecycle-script patterns |
+| 5 | **Credential inventory** | Which credential files the worm targets exist on disk (**names only — never read**) |
+| 6 | **GitHub Actions audit** | `pull_request_target` + cache (Wave 5 vector); OIDC scope; unpinned actions |
+
+`--check` / `--check-pypi` additionally fetch the package's registry metadata **and** its tarball/wheel
+(read **in memory** — nothing is ever extracted to disk or executed) and score the contents.
 
 ---
 
-## Auto-fix — what gets removed automatically
+## Risk score & exit code
 
-Criterion: artefacts with no legitimate use case, 100% certainty, confirmed per-item before deletion.
+| Score | Verdict | Process exit |
+|---|---|---|
+| 0 | Proceed with caution (a 0 is **not** a clean guarantee — see Limitations) | 0 |
+| 1–14 | Low — manual review recommended | 0 |
+| 15–39 | Moderate — verify independently | 0 |
+| 40–69 | **High — investigate before installing** | **1** |
+| 70–100 | **CRITICAL — do not install** | **1** |
 
-| What | Action |
-|---|---|
-| `gh-token-monitor` daemon file | Stop service + delete file |
-| Payload files in node\_modules | Delete file |
-
-Credential rotation requires authentication — listed as manual steps only.
-
----
-
-## 4 proactive protections
-
-Each disclosed with benefit + tradeoffs before you confirm.
-
-| Protection | Tradeoff |
-|---|---|
-| Age-gate wrapper (`npm_safe_install.py`) | Must use wrapper instead of `npm install` |
-| `save-exact=true` in npm config | Upgrades require manual version bumps |
-| `ignore-scripts=true` in project `.npmrc` | Native addons need per-package override |
-| GitHub Actions SHA-pinning report | Report only — you edit the YAML |
+The non-zero exit at ≥ 40 is what lets the generated `npm_safe` / `pip_safe` wrappers **block** an install.
 
 ---
 
-## Diagnosis report
+## ⚠ If the persistence daemon is found
 
-Select **[R]** after a scan. Saves `shai_hulud_report_YYYYMMDD_HHMMSS.txt`.
+The worm's `gh-token-monitor` daemon polls GitHub every ~60 s and triggers **`rm -rf ~/`** if it detects a
+token revocation. **Never revoke or rotate credentials before the daemon is removed.**
 
-Paste the full file into Claude or another LLM. Contains:
-- System info (OS, Node, npm, git versions)
-- All findings with full detail
-- Installed packages flagged against known-target list
-- Credential files present (names only — no values)
-- Actions taken + protections applied
-- 7 pre-written questions for LLM guidance
+**Correct order:** `STOP → ISOLATE → IMAGE → REMOVE DAEMON → ROTATE CREDS → AUDIT → REBUILD → REPORT`
+
+`--patch` and `--incident` enforce this ordering for you. Run `--incident` for the full guide.
 
 ---
 
-## Risk score (`--check`)
+## Limitations (read before trusting a clean result)
 
-| Score | Action |
-|---|---|
-| 0 | No indicators — read limitations before proceeding |
-| 1–14 | Low — manual review recommended |
-| 15–39 | Moderate — verify independently |
-| 40–69 | High — do not install without investigation |
-| 70–100 | Critical — do not install |
+- Novel obfuscation with no overlap to known IOCs evades pattern detection.
+- The known-bad list lags the zero-day window (typically 2–8 h before public IOC lists update).
+- Payloads fetched **after** install (not present in the tarball) are not caught.
+- A **score of 0 is not a guarantee of safety** — it means no known indicator matched.
+- This is a focused worm scanner, not a replacement for Socket.dev / Snyk / Wiz continuous monitoring.
 
----
-
-## If the daemon is found
-
-Token revocation triggers `rm -rf ~/`. The daemon self-destructs after 24 hours.
-
-**Correct sequence: ISOLATE → REMOVE DAEMON (use [F]) → REVOKE CREDENTIALS**
-
-Use **[I]** for full manual incident guide.
+Authoritative IOC sources are listed in [README.md](README.md#sources) and `CLAUDE.md §4.7`.
 
 ---
 
-## Limitations
-
-- Novel obfuscation not in the IOC database evades pattern detection
-- Known-bad version list lags zero-day attack windows
-- Runtime-fetched payloads (downloaded after install) are not caught
-- Does not replace Socket.dev, Snyk, or Wiz for continuous registry monitoring
-
-Authoritative IOC list: `https://github.com/DataDog/indicators-of-compromise/tree/main/shai-hulud-2.0`
-
----
----
-
-## v1.1 — Previous version
-
-> Retained as changelog reference. v1.1 used explicit CLI flags. All detection logic carried forward and expanded in v2.0.
-
-**Breaking changes v1.1 → v2.0:**
-- `--scan` flag removed (use interactive menu option 1)
-- `--incident` flag removed (use interactive menu option 3)
-- `--check` retained as the only non-interactive flag
-- `--path` retained as a modifier
-
-**New in v2.0:**
-- Interactive session replaces flag-based flow
-- Live progress spinner per check
-- Structured findings with auto-fix functions attached
-- Auto-fix: daemon removal + payload file deletion, per-item confirm
-- 4 proactive protections with tradeoff disclosure before each
-- LLM-ready diagnosis report generator
-- `install.sh` + `install.bat` installers
-- PyInstaller binary distribution (`dist/`)
-- Corrected: `min-release-age=7d` is not a valid npm 10 config — replaced with `npm_safe_install.py` wrapper
-
-### v1.1 commands
-
-```bash
-python shai_hulud_guard.py --scan
-python shai_hulud_guard.py --scan --path ~/projects/my-app
-python shai_hulud_guard.py --check @tanstack/react-router
-python shai_hulud_guard.py --check @tanstack/react-router@1.169.5
-python shai_hulud_guard.py --incident
-python shai_hulud_guard.py --version
-```
-
-### v1.1 checks (same 6, same logic)
-
-| # | Check |
-|---|---|
-| 1 | Persistence daemon |
-| 2 | package.json audit |
-| 3 | Lock file + npmrc hygiene |
-| 4 | node\_modules deep scan |
-| 5 | Credential file inventory |
-| 6 | GitHub Actions audit |
-
-### v1.1 risk score
-
-| Score | Verdict |
-|---|---|
-| 0 | Clean |
-| 1–14 | Low |
-| 15–39 | Moderate |
-| 40–69 | High |
-| 70–100 | Critical |
-
-### v1.1 daemon warning
-
-Do not revoke tokens before daemon removal. Run `--incident` for the sequence.
+*Looking for the old interactive (v1.1 / v2.0) CLI? It is archived, unmaintained, in [`legacy/`](legacy/). v2.4 is the one canonical tool.*

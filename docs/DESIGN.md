@@ -286,25 +286,59 @@ because:
 
 The trade is more memory for *integrity-verifiable* tarball reads. Worth it.
 
-### 2.8 Why GHSA `advisories` is scaffolded but empty in v2.4
+### 2.8 GHSA `advisories` are populated from OSV, not hand-typed
 
-**Decision:** `KNOWN_BAD` entries get an `advisories: []` field, but most are
-left empty.
+**Decision:** `KNOWN_BAD` entries carry an `advisories` list of authoritative
+GHSA IDs, populated (and kept current) by `tools/refresh_advisories.py` — a
+**maintainer-only** helper that queries OSV.dev (Google's aggregator of GHSA +
+NVD + the npm/PyPI malware feeds). It is **never** run by the scanner: §5.4
+forbids the scanner from phoning home anywhere but the npm/PyPI registries, so
+the network-touching refresh lives in a separate dev tool (same precedent as
+`benchmarks/run_calibration.py`).
 
-Reasoning: I (the v2.4 author) have moderate-confidence knowledge of some
-Shai-Hulud GHSA IDs but cannot verify them without manual lookup in this
-environment. Inventing a GHSA ID is *worse* than leaving the field empty —
-it gives downstream consumers a false sense of completeness and could send
-them to non-existent advisories.
+Reasoning: inventing a GHSA ID is *worse* than an empty field — it sends
+consumers to non-existent advisories. So population is gated on a verifiable
+source. The tool prints suggestions; a human verifies each at
+`github.com/advisories` (§5.5); only then are they committed. Only the
+**supply-chain / malicious-code** advisory matching the `bad` version is
+recorded — unrelated CVEs in the same package (e.g. guardrails-ai's older
+XXE / RCE CVEs) are deliberately excluded.
 
-Cost: the field is mostly empty in v2.4. Mitigation: it is *scaffolded* —
-the data shape is stable, downstream tools that depend on `advisories[]`
-will not break when v2.5 populates it. The `llm_instructions` field in
-`--json` output asks the LLM to suggest candidate GHSA IDs to look up — a
-human-in-the-loop population path.
+This process also surfaced and corrected a misattribution: the Wave-1 entry was
+`tinycolor2` (an *uncompromised* package — 0 OSV vulns); the package actually hit
+by the Sep-2025 worm is `@ctrl/tinycolor` (GHSA-qjqf-7j6f-82c4), matching the
+cited StepSecurity "ctrl-tinycolor" post-mortem.
 
-A future maintainer with internet access should populate this field by
-querying GHSA per entry.
+Cost: the mapping is only as fresh as the last maintainer run. Mitigation: the
+tool exits non-zero when a tracked package has a new advisory not yet recorded,
+so it can run as a periodic CI / cron check.
+
+### 2.9 Subprocess analysis is split by intent (curl/wget vs. bare shell)
+
+**Decision:** the single pattern that flagged any `subprocess.run(["sh" | "bash"
+| "curl" …])` as HIGH was split into three, by *intent*:
+- a network **downloader** (`curl`/`wget`) spawned from a package → **HIGH**;
+- a shell carrying a **download / pipe-to-shell / remote `-c` / reverse-shell /
+  encoded payload** → **HIGH** (the real download-pipe-execute TTP);
+- a **bare local shell interpreter** (e.g. `["sh", "./autogen.sh"]`) → **MEDIUM**.
+
+Reasoning: the empirical driver was matplotlib==3.8.3 scoring 45/100 — one MEDIUM
+short of the do-not-install threshold. The HIGH came from `setupext.py` running
+`subprocess.check_call(["sh", "./autogen.sh"])` — autotools generating the
+FreeType build config. Every native-extension package does this (numpy, scipy,
+lxml, Pillow shell out to configure/make). Running a *local build script* is not
+the worm's behaviour; *download-pipe-execute* is. Splitting by intent drops the
+legit native-build case to MEDIUM (+4, still visible) while keeping the actual
+attack shape at HIGH. **matplotlib fell 45→25, numpy 37→21**, with no change to
+the true-positive set (those hard-block via `KNOWN_BAD`, not this pattern).
+
+Cost: a package that spawns a bare shell which *then* misbehaves in a way none of
+the HIGH escalators catch would score only MEDIUM. Mitigation: the definitive
+CRITICALs (home wipe, C2 domains, token literals, reverse shells, `/proc/pid/mem`,
+`os.system` with a downloader) keep their own patterns, and the "silent file
+download" (`curl -s http` / `wget -q http`) pattern is independent. Regression-
+guarded by `tests/test_patterns.py` (build-shell = MEDIUM, payload-shell = HIGH,
+curl = HIGH).
 
 ---
 
