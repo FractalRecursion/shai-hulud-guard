@@ -10,27 +10,34 @@
 
 ## 0. CURRENT STATE & EXACT NEXT ACTION
 
-- **Phase:** v2.4.0 is feature-complete, GitHub-productionised (CI/signing/release/security workflows),
-  and the post-consolidation detection fixes are done & verified. **Everything is LOCAL — nothing pushed.**
-- **Git:** branch **`main`** (also `release/v2.4.0`). Commits are **SSH-signed → "Verified"** from
-  `5c742f9` onward (the first 3 historical commits stay unsigned by design). Tag **`v2.4.0`**
-  (annotated, signed) — will be re-pointed to the latest commit before push.
-- **gh CLI:** installed and **authenticated as `FractalRecursion`** (token scopes incl. `repo`,`workflow`).
-- **Validation (last run, all green):** `pytest` **104 passed** · `ruff check .` **clean** ·
-  `--self-test` **6/6** · calibration FP/TP healthy (see §4) · `--version` = 2.4.0.
+- **Phase:** v2.4.0 is **PUBLIC and released.** Repo: **https://github.com/FractalRecursion/shai-hulud-guard**
+  (public). `main` + signed tag `v2.4.0` pushed. Version decision: **stayed v2.4.0** (transparency-first
+  single clean first release). HEAD = `e37210a` (signed); tag `v2.4.0` → `e37210a`.
+- **Release:** `v2.4.0` published with assets — `SHA256SUMS`, `shai_hulud_guard.py`, and per-OS binaries
+  (`-linux-x86_64`, `-macos-arm64`, `-windows-x86_64.exe`). `release.yml` succeeded.
+- **CI/CD live:** CodeQL ✅ passing; Scorecard scheduled; **Dependabot already opened PRs** bumping the
+  SHA-pinned actions; `ci.yml` matrix on `main` was queued (Actions backlog) → confirm it greens the badge.
+- **Secrets/PII audit (pre-push): CLEAN.** No keys/tokens/credential files tracked; `.claude/` not tracked;
+  SSH **private** key is in `~/.ssh/` (outside repo). Personal Gmail **removed** from `pyproject.toml` +
+  `CODE_OF_CONDUCT.md` → GitHub-only contact (@FractalRecursion). Test token-exemplars are split via
+  concatenation so they are not contiguous literals (no scanner false-trips).
+- **gh CLI:** authenticated as `FractalRecursion` (scopes `repo`,`workflow`,`gist`,`read:org`). Git pushes
+  over **HTTPS** (token), so the SSH key is **signing-only**.
+- **Validation:** `pytest` **104 passed** · `ruff` clean · `--self-test` 6/6 · calibration healthy (§4).
 
-**EXACT NEXT ACTION (user-gated):**
-1. **Commit** the post-consolidation fixes (this session's work — see §3), re-point the signed `v2.4.0` tag.
-   *(Pending the version decision below.)*
-2. **Phase B — go public** (all runnable now; the only human step, `gh auth login`, is already done):
-   - `gh ssh-key add C:\Users\Utente\.ssh\id_ed25519_shguard.pub --type signing --title "shai-hulud-guard signing"` → flips commits to **Verified** on GitHub.
-   - `gh repo create shai-hulud-guard --public --source . --remote origin --push` (**name MUST be `shai-hulud-guard`** — README badge URLs hardcode `FractalRecursion/shai-hulud-guard`).
-   - `git push origin v2.4.0` → triggers `release.yml` (build + checksums + provenance); push to `main` makes the **CI badge** go green.
-   - Repo settings: description, topics (`supply-chain-security npm pypi malware-detection incident-response python`), branch protection on `main` (require CI, allow admin override), confirm Scorecard `publish_results`.
-3. **Then build the prioritised feature: one-command removal (§5).**
+**⚠ ONE PENDING MANUAL STEP (for the green "Verified" badge):** the SSH **signing** key is not yet
+registered on GitHub (the `gh` token lacks `admin:ssh_signing_key`). Commits are signed locally but show
+**"Unverified"** on GitHub until registered — registration is **retroactive** (existing commits flip to
+Verified). Do EITHER:
+  - **Web UI:** GitHub → Settings → SSH and GPG keys → New SSH key → **Key type: Signing key** → paste:
+    `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFvmidiqmCKl5e0Kpwz/2X708XTFzFxus2izA5Xrj7ox shai-hulud-guard-signing`
+  - **OR CLI:** `gh auth refresh -h github.com -s admin:ssh_signing_key` (browser), then
+    `gh ssh-key add C:\Users\Utente\.ssh\id_ed25519_shguard.pub --type signing --title "shai-hulud-guard signing"`.
 
-**OPEN DECISION:** keep **v2.4.0** (one clean first public release — recommended) or bump to **v2.4.1**
-(record today's calibration/scoring fixes as a distinct release). No version bump applied yet.
+**EXACT NEXT ACTION:**
+1. (Optional polish) register the signing key above; confirm `ci.yml` on `main` went green; optionally add
+   branch protection on `main` once the CI check-context names are known (require CI, keep admin override).
+2. **⭐ NEXT FEATURE (v2.4.1): one-command removal `--remove` — see §5.** Build it, bump to v2.4.1, tag & push.
 
 ---
 
