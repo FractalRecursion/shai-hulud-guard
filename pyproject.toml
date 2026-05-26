@@ -5,7 +5,7 @@ description = "Cross-platform scanner, hardener, and proactive-defence tool for 
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "GPL-3.0-or-later" }
-authors = [{ name = "and.altobello@gmail.com" }]
+authors = [{ name = "FractalRecursion" }]
 keywords = ["security", "supply-chain", "npm", "pypi", "malware", "shai-hulud", "incident-response", "typosquatting"]
 classifiers = [
     "Development Status :: 4 - Beta",

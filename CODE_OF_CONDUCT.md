@@ -29,8 +29,9 @@ Examples of unacceptable behaviour:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behaviour may be
-reported to the maintainer at **and.altobello@gmail.com**. All complaints will
-be reviewed and investigated promptly and fairly.
+reported privately to the maintainer **[@FractalRecursion](https://github.com/FractalRecursion)**
+on GitHub (e.g. via a [private security advisory](https://github.com/FractalRecursion/shai-hulud-guard/security/advisories/new)
+for sensitive matters). All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 
