@@ -15,28 +15,21 @@
   single clean first release). HEAD = `e37210a` (signed); tag `v2.4.0` → `e37210a`.
 - **Release:** `v2.4.0` published with assets — `SHA256SUMS`, `shai_hulud_guard.py`, and per-OS binaries
   (`-linux-x86_64`, `-macos-arm64`, `-windows-x86_64.exe`). `release.yml` succeeded.
-- **CI/CD live:** CodeQL ✅ passing; Scorecard scheduled; **Dependabot already opened PRs** bumping the
-  SHA-pinned actions; `ci.yml` matrix on `main` was queued (Actions backlog) → confirm it greens the badge.
+- **CI/CD live:** CodeQL ✅ · OpenSSF Scorecard ✅ · **Dependabot** active (auto-PRs bumping pinned actions).
+  `ci.yml` matrix **reduced to 8 jobs** — the scarce Intel `macos-13` runner (only used to test py3.8 on
+  macOS) was dropped because it chronically queued and left the badge stuck; py3.8 is covered on Ubuntu +
+  Windows, macOS on `macos-latest` (3.10/3.12). The other 8 jobs had already passed.
+- **Commit signing: ✅ VERIFIED.** SSH signing key registered on GitHub; all 5 signed commits show
+  `verified=valid` on github.com (the first 3 historical commits are `unsigned` by design).
 - **Secrets/PII audit (pre-push): CLEAN.** No keys/tokens/credential files tracked; `.claude/` not tracked;
-  SSH **private** key is in `~/.ssh/` (outside repo). Personal Gmail **removed** from `pyproject.toml` +
-  `CODE_OF_CONDUCT.md` → GitHub-only contact (@FractalRecursion). Test token-exemplars are split via
-  concatenation so they are not contiguous literals (no scanner false-trips).
-- **gh CLI:** authenticated as `FractalRecursion` (scopes `repo`,`workflow`,`gist`,`read:org`). Git pushes
-  over **HTTPS** (token), so the SSH key is **signing-only**.
+  SSH **private** key is in `~/.ssh/` (outside repo). Personal Gmail **removed** → GitHub-only contact
+  (@FractalRecursion). Test token-exemplars are split via concatenation (no scanner false-trips).
+- **gh CLI:** authenticated as `FractalRecursion`. Git pushes over **HTTPS**; the SSH key is **signing-only**.
 - **Validation:** `pytest` **104 passed** · `ruff` clean · `--self-test` 6/6 · calibration healthy (§4).
 
-**⚠ ONE PENDING MANUAL STEP (for the green "Verified" badge):** the SSH **signing** key is not yet
-registered on GitHub (the `gh` token lacks `admin:ssh_signing_key`). Commits are signed locally but show
-**"Unverified"** on GitHub until registered — registration is **retroactive** (existing commits flip to
-Verified). Do EITHER:
-  - **Web UI:** GitHub → Settings → SSH and GPG keys → New SSH key → **Key type: Signing key** → paste:
-    `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFvmidiqmCKl5e0Kpwz/2X708XTFzFxus2izA5Xrj7ox shai-hulud-guard-signing`
-  - **OR CLI:** `gh auth refresh -h github.com -s admin:ssh_signing_key` (browser), then
-    `gh ssh-key add C:\Users\Utente\.ssh\id_ed25519_shguard.pub --type signing --title "shai-hulud-guard signing"`.
-
 **EXACT NEXT ACTION:**
-1. (Optional polish) register the signing key above; confirm `ci.yml` on `main` went green; optionally add
-   branch protection on `main` once the CI check-context names are known (require CI, keep admin override).
+1. (Optional) confirm the latest `ci.yml` run on `main` is green (the 8-job matrix); optionally add branch
+   protection on `main` (require CI, keep admin override) once a collaborator joins.
 2. **⭐ NEXT FEATURE (v2.4.1): one-command removal `--remove` — see §5.** Build it, bump to v2.4.1, tag & push.
 
 ---
@@ -63,7 +56,7 @@ Verified). Do EITHER:
 | Area | File(s) | Note |
 |---|---|---|
 | **Commit signing** | repo-local git config + `~/.ssh/id_ed25519_shguard{,.pub}` + `~/.ssh/allowed_signers` | SSH (ed25519), passphrase-free (signing-only key). `gpg.format=ssh`, `commit.gpgsign`/`tag.gpgsign` true (local). |
-| **CI** | `.github/workflows/ci.yml` | matrix `os:[ubuntu,macos,windows] × py:[3.8,3.10,3.12]`; `ruff`+`pytest`+`--self-test`; SHA-pinned actions; py3.8 excluded on macos-latest (arm64). |
+| **CI** | `.github/workflows/ci.yml` | 8-job matrix `os:[ubuntu,windows,macos-latest] × py:[3.8,3.10,3.12]`; `ruff`+`pytest`+`--self-test`; SHA-pinned actions. macOS+py3.8 skipped (no 3.8 on arm64 macos-latest; Intel macos-13 dropped — scarce runner). |
 | **Release** | `.github/workflows/release.yml` | on tag `v*`: per-OS PyInstaller build + `SHA256SUMS` + SLSA provenance → GitHub Release. |
 | **Security scanning** | `.github/workflows/{codeql,scorecard}.yml` | CodeQL (python) + OpenSSF Scorecard (`publish_results`). |
 | **Presence** | `.github/dependabot.yml`, `ISSUE_TEMPLATE/{bug,feature,ioc,config}`, `PULL_REQUEST_TEMPLATE.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CODEOWNERS` | recruiter-grade. |

@@ -33,13 +33,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.8", "3.10", "3.12"]
-        # Python 3.8 is not available on the arm64 macos-latest runner;
-        # cover 3.8 on macOS via the Intel macos-13 runner instead.
+        # Python 3.8 isn't available on the arm64 macos-latest runner, and the
+        # Intel macos-13 runner is scarce on the free tier (chronic queueing that
+        # leaves the badge stuck). 3.8 is fully covered on Ubuntu + Windows, and
+        # macOS behaviour is covered on macos-latest with 3.10/3.12 — so we skip
+        # the macOS + 3.8 cell entirely (8 jobs, all on plentiful runners).
         exclude:
           - os: macos-latest
-            python-version: "3.8"
-        include:
-          - os: macos-13
             python-version: "3.8"
 
     steps:
