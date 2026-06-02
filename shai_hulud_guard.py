@@ -67,6 +67,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -114,6 +115,10 @@ MALICIOUS_PATTERNS: List[Tuple[str, str, str]] = [
     # ── Worm identity markers ────────────────────────────────────────────────
     (r"Sha[i1].?Hulud|Shai.?Hulud",              "Worm identity string",                       "CRITICAL"),
     (r"Here We Go Again|The Second Coming",       "Worm campaign tag",                          "CRITICAL"),
+    # Reversed banner — the worm reverses its marker to evade naïve string matching.
+    # Source: perplexityai/bumblebee threat_intel/antv-mini-shai-hulud.json
+    # `_indicators` (marker reversed) cross-referenced to the Socket.dev advisory.
+    (r"niagA oG eW ereH|duluH-iahS",              "Reversed Shai-Hulud worm marker (obfuscation)", "CRITICAL"),
     (r"TeamPCP|DeadCatx3|PCPcat|ShellForce|CipherForce", "Known threat actor marker",          "CRITICAL"),
     (r"gh.?token.?monitor",                       "Persistent token-monitor daemon name",       "CRITICAL"),
     (r"A Mini Shai.?Hulud has Appeared",          "Worm repo description tag",                  "CRITICAL"),
@@ -1447,22 +1452,43 @@ def classify_infection(
 # ═══════════════════════════════════════════════════════════════════════════════
 #  REMEDIATION ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
-def _execute_cmds(cmds: List[str], label: str, cwd: Optional[Path] = None) -> bool:
-    """Execute shell commands sequentially, return True if all succeed."""
-    for cmd in cmds:
-        info(f"Running: {cmd}")
-        try:
-            r = subprocess.run(cmd, shell=True, capture_output=True, text=True,  # noqa: S602 (static remediation commands, not user input — see CLAUDE.md §5.8)
-                               cwd=str(cwd) if cwd else None,
-                               timeout=60, errors="replace")
-            if r.returncode == 0:
-                ok(f"  OK: {cmd[:60]}")
-            else:
-                warn(f"  Exit {r.returncode}: {(r.stderr or r.stdout)[:180]}")
-        except Exception as e:
-            warn(f"  Failed ({label}): {e}")
-            return False
-    return True
+def _run(argv: List[str], cwd: Optional[Path] = None, timeout: int = 60) -> bool:
+    """Execute ONE command as an argument vector — ``shell=False``, injection-proof (§5.8).
+
+    Best-effort: never raises. ``capture_output`` swallows stdout/stderr (replaces
+    the old shell ``2>/dev/null``); a non-zero exit is logged and tolerated
+    (replaces the old ``|| true``). Returns True only on exit code 0.
+    """
+    printable = " ".join(argv)
+    info(f"Running: {printable}")
+    try:
+        r = subprocess.run(argv, shell=False, capture_output=True, text=True,
+                           cwd=str(cwd) if cwd else None,
+                           timeout=timeout, errors="replace")
+    except Exception as e:
+        warn(f"  Failed: {e}")
+        return False
+    if r.returncode == 0:
+        ok(f"  OK: {printable[:60]}")
+        return True
+    warn(f"  Exit {r.returncode}: {(r.stderr or r.stdout or '').strip()[:180]}")
+    return False
+
+
+def _execute_cmds(cmds: List[List[str]], label: str, cwd: Optional[Path] = None) -> bool:
+    """Execute argument-vector commands sequentially (``shell=False``, §5.8).
+
+    ``cmds`` is a list of argv lists, e.g. ``[["npm", "cache", "clean", "--force"]]`` —
+    never shell strings. Package names therefore reach the OS as literal argv
+    elements and can never be interpreted as shell metacharacters. Returns True
+    only if every command exits 0 (tolerant steps such as removing an absent
+    daemon unit log their non-zero exit and continue).
+    """
+    all_ok = True
+    for argv in cmds:
+        if not _run(argv, cwd=cwd):
+            all_ok = False
+    return all_ok
 
 
 def _execute_ps(cmd: str) -> bool:
@@ -1547,8 +1573,8 @@ def _write_daemon_script(plat: str, out_dir: Path) -> Optional[Path]:
 
 def _write_cleanup_script(plat: str, bad_packages: List[str], out_dir: Path) -> Optional[Path]:
     """Write a package cleanup script to out_dir."""
-    pkgs_str = " ".join(bad_packages) if bad_packages else ""
-    uninstall_line = f"npm uninstall {pkgs_str}" if pkgs_str else "# No specific bad packages — full clean"
+    pkgs_str = " ".join(shlex.quote(p) for p in bad_packages) if bad_packages else ""
+    uninstall_line = f"npm uninstall --ignore-scripts {pkgs_str}" if pkgs_str else "# No specific bad packages — full clean"
     try:
         if plat == "windows":
             path = out_dir / "clean_packages.ps1"
@@ -1679,7 +1705,12 @@ def generate_remediation(
                 print(f"    {c}")
             if auto:
                 info("Auto-executing daemon removal...")
-                _execute_cmds(cmds, "daemon removal")
+                _execute_cmds([
+                    ["systemctl", "--user", "stop", "gh-token-monitor"],
+                    ["systemctl", "--user", "disable", "gh-token-monitor"],
+                    ["rm", "-f", str(Path.home() / ".config/systemd/user/gh-token-monitor.service")],
+                    ["systemctl", "--user", "daemon-reload"],
+                ], "daemon removal")
         elif plat == "darwin":
             cmds = [
                 "launchctl unload ~/Library/LaunchAgents/com.user.gh-token-monitor.plist 2>/dev/null || true",
@@ -1689,7 +1720,10 @@ def generate_remediation(
                 print(f"    {c}")
             if auto:
                 info("Auto-executing daemon removal...")
-                _execute_cmds(cmds, "daemon removal")
+                _execute_cmds([
+                    ["launchctl", "unload", str(Path.home() / "Library/LaunchAgents/com.user.gh-token-monitor.plist")],
+                    ["rm", "-f", str(Path.home() / "Library/LaunchAgents/com.user.gh-token-monitor.plist")],
+                ], "daemon removal")
         else:  # windows
             ps = (
                 "$kw=@('gh-token-monitor','github-token-monitor','npm-helper','bun-helper','node-updater');"
@@ -1700,6 +1734,8 @@ def generate_remediation(
             print(f"    {ps}")
             if auto:
                 info("Auto-executing daemon removal (PowerShell)...")
+                # `ps` is built only from the hardcoded keyword list above — no
+                # registry/lockfile/user data is ever interpolated into it (§5.8).
                 _execute_ps(ps)
         script = _write_daemon_script(plat, project_path)
         if script:
@@ -1714,7 +1750,7 @@ def generate_remediation(
             info("No specific packages identified — performing full clean reinstall")
         print()
         if bad_packages:
-            print(f"    npm uninstall {' '.join(bad_packages)}")
+            print(f"    npm uninstall --ignore-scripts {' '.join(bad_packages)}")
         print("    npm cache clean --force")
         if plat == "windows":
             print("    Remove-Item -Recurse -Force node_modules")
@@ -1726,9 +1762,9 @@ def generate_remediation(
             info("Auto-executing package cleanup...")
             try:
                 if bad_packages:
-                    _execute_cmds([f"npm uninstall {' '.join(bad_packages)}"],
+                    _execute_cmds([["npm", "uninstall", "--ignore-scripts", *bad_packages]],
                                   "uninstall bad packages", project_path)
-                _execute_cmds(["npm cache clean --force"], "clear npm cache")
+                _execute_cmds([["npm", "cache", "clean", "--force"]], "clear npm cache")
                 nm = project_path / "node_modules"
                 lf = project_path / "package-lock.json"
                 if nm.exists():
@@ -1737,7 +1773,7 @@ def generate_remediation(
                 if lf.exists():
                     lf.unlink()
                     ok("package-lock.json removed")
-                _execute_cmds(["npm ci --ignore-scripts"], "clean reinstall", project_path)
+                _execute_cmds([["npm", "ci", "--ignore-scripts"]], "clean reinstall", project_path)
             except Exception as e:
                 warn(f"Auto-cleanup error: {e}")
         _write_cleanup_script(plat, bad_packages, project_path)

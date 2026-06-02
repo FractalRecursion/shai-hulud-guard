@@ -52,6 +52,7 @@ def test_risk_levels_are_canonical(guard):
 EXEMPLARS = {
     "Worm identity string":                        "// Shai-Hulud was here",
     "Worm campaign tag":                           "label = 'Here We Go Again'",
+    "Reversed Shai-Hulud worm marker (obfuscation)": "var m = 'niagA oG eW ereH';",
     "Known threat actor marker":                   "actor = 'TeamPCP'",
     "Persistent token-monitor daemon name":        "service: gh-token-monitor",
     "Worm repo description tag":                    "A Mini Shai-Hulud has Appeared",

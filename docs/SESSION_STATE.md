@@ -127,8 +127,12 @@ safe order**.
   3. **Delete payload files** (`router_init.js`, `setup_bun.js`, `bun_environment.js`, `setup.mjs`).
   4. **NEVER auto-revoke/rotate credentials** (§5.2) — print the manual rotation checklist *after* removal.
   5. Print audit/rebuild/report guidance (the `--incident` tail).
-- **Confirmation:** interactive per-item confirm by default; `--auto`/`--yes` to skip (document the risk).
-  Reuse `_execute_cmds`/`_execute_ps` (already noqa-S602-documented) for execution.
+- **Default posture (DECIDED):** **dry-run preview** — print the exact removal plan and change nothing;
+  require **`--apply`** to execute. **npm-first; PyPI is a fast follow-up.** Consider quarantining
+  payloads/packages to a `.shai-hulud-quarantine/` dir (reversible) rather than hard-deleting (§5.9 high-stakes).
+- **Pre-reqs that land first (before `--remove`):** (a) convert `_execute_cmds` + the `generate_remediation`
+  auto-path from `shell=True` → list-form argv (§5.8; injection-proof; add `--ignore-scripts`) — this
+  **supersedes** the old "reuse `_execute_cmds`/`_execute_ps`" note; (b) F1 reversed-marker pattern.
 - **Exit codes:** `0` removed/clean; `1` if removal failed or manual steps remain. Document in CLAUDE.md §2.
 - **Tests (add `tests/test_remove.py`):** synthetic infected dir → `run_remove` → assert daemon file gone,
   payload files gone, package removed, **no credential-revocation call**, and the daemon-before-anything order.
@@ -137,7 +141,10 @@ safe order**.
 
 **Roadmap after `--remove`:** `--scan-file <path>` (vet a downloaded artifact before opening — reuse
 `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`) · P1 fuzz harness + `tests/test_protect.py` · P2 SARIF
-output → GitHub Security tab, reusable GitHub Action, SBOM ingestion · GPG signing (user learning goal).
+output → GitHub Security tab, reusable GitHub Action, SBOM ingestion · GPG signing (user learning goal) ·
+**(bumblebee-derived) F2+F3** externalize IOC data → versioned `threat_intel/*.json` w/ structured
+`_indicators` · **F4** `--exposure-catalog` exact-match consumer (bumblebee-compatible) · **F5** MCP-config
++ VS Code-extension scanning.
 
 ---
 
