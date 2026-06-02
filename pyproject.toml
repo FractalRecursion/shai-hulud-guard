@@ -39,7 +39,7 @@ dev = [
 
 # No [project.scripts] entry: the package is intentionally distributed as a
 # single .py file (and a PyInstaller .exe), not as a pip-installable console
-# command. Build via `python build.py` — see docs/RUFF.md and CLAUDE.md §8.3.
+# command. Build via `python build.py` — see docs/RUFF.md and CLAUDE.md §8.2.
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  ruff — combined linter + formatter

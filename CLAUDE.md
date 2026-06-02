@@ -12,36 +12,44 @@ Single-folder Python project, **runtime stdlib only**, Python 3.8+, runs on **Li
 
 ```
 Shai_Hulud_Guard/
-├── CLAUDE.md                  ← this file (instructions to Claude Code)
+├── CLAUDE.md                  ← this file — behaviours, invariants, automation, live TODO (read every session)
+├── MEMORY.md                  ← on-demand state/history/calibration + --remove build guide (split rationale: §8.1)
 ├── README.md                  ← user-facing docs
 ├── QUICKSTART.md              ← user-facing quick-start (v2.4 flag-based CLI)
 ├── CHANGELOG.md               ← version history
-├── LICENSE                    ← GPL-3.0
+├── CONTRIBUTING.md            ← contribution rules (incl. the §4.7 cited-source rule)
+├── CODE_OF_CONDUCT.md
 ├── SECURITY.md                ← disclosure policy + project-is-defensive note
-├── shai_hulud_guard.py        ← v2.4.0  canonical CLI (~3,200 lines)
+├── LICENSE                    ← GPL-3.0
+├── BENCHMARKS.md              ← live-registry top-50 npm+PyPI FP/TP scoring (pinned versions)
+├── shai_hulud_guard.py        ← v2.4.0  canonical CLI (~3,860 lines)
 │
 ├── pyproject.toml             ← project metadata + ruff config + pytest config
 ├── Makefile                   ← Linux/macOS conveniences (install/test/lint/build)
 ├── build.ps1                  ← Windows PowerShell wrapper around build.py
 ├── build.py                   ← Cross-platform PyInstaller build
 │
-├── tests/                     ← pytest suite (originally for v1.1+v2.0;
-│   │                            being updated for v2.4 in Phase 4)
+├── tests/                     ← pytest suite, 104 tests (v2.4 — per-file map in MEMORY.md §3)
 │   ├── conftest.py
 │   ├── test_patterns.py
 │   ├── test_known_bad.py
 │   ├── test_tarball.py
-│   └── test_finding.py
+│   ├── test_finding.py
+│   ├── test_typosquatting.py
+│   ├── test_lockfile.py
+│   ├── test_noise_filter.py
+│   ├── test_sentinel.py
+│   └── test_json_schema.py
 │
 ├── docs/
-│   ├── RUFF.md                ← what ruff does + how this project uses it
-│   ├── THREAT_MODEL.md        ← (Phase 5B) attack chain → defensive features
-│   ├── DESIGN.md              ← (Phase 5B) invariants, trade-offs, non-goals
-│   └── JSON_SCHEMA.md         ← (Phase 5A) --json output schema, with LLM-ready example
+│   ├── RUFF.md                ← ruff rule-group explainer
+│   ├── THREAT_MODEL.md        ← attack chain → defensive features
+│   ├── DESIGN.md              ← invariants, trade-offs, non-goals
+│   ├── JSON_SCHEMA.md         ← --json output schema, with LLM-ready example
+│   └── SECURITY_REVIEW.md     ← framework-driven review + scored roadmap
 │
-├── benchmarks/                ← (Phase 5C) live-registry FP/TP measurement
-│   ├── run_calibration.py
-│   └── BENCHMARKS.md
+├── benchmarks/
+│   └── run_calibration.py     ← live-registry FP/TP measurement (writes BENCHMARKS.md)
 │
 ├── tools/                     ← maintainer-only dev tooling (NEVER run by the scanner)
 │   └── refresh_advisories.py  ← refresh KNOWN_BAD advisories from OSV.dev
@@ -426,115 +434,81 @@ python shai_hulud_guard.py --unprotect --path /tmp/sandbox
 
 ---
 
-## 8. Project infrastructure — status
+## 8. Project status, docs map & TODO
 
-### 8.1 Test suite — `tests/` ✅ UPDATED FOR v2.4 (104 tests passing)
+### 8.1 Doc split — read this
 
-The pytest suite covers the canonical v2.4 module via the `guard` fixture
-(`tests/conftest.py` loads root `shai_hulud_guard.py` via importlib; optional
-`legacy_v1`/`legacy_v2` fixtures load `legacy/` files and skip if pruned).
+Two top-level docs, separated by **read-frequency**:
 
-```bash
-python -m pytest                  # 104 tests, ~0.3s
-python -m pytest -v               # per-test names
-```
+- **`CLAUDE.md` (this file) — read EVERY session.** Behaviours, safety invariants (§5), automation/commands
+  (§8.2), conventions (§7), and the live TODO (§8.4). Only what's needed to make a **correct, safe edit** —
+  i.e. what prevents a security regression or a coding mistake.
+- **`MEMORY.md` — read ON DEMAND.** Current state & next action, infra/CI/test/build history + ruff rationale,
+  verified calibration numbers, the full `--remove` build guide, environment notes, deferred backlog. Merged
+  from the former `docs/SESSION_STATE.md` + `docs/HANDOFF_REMOVE.md`.
 
-Test files:
+**Rule of thumb:** a fact you need *to edit safely* → here; a fact about *what was done / current state / a
+future build* → `MEMORY.md`. Subject docs (`docs/`): `THREAT_MODEL`, `DESIGN`, `JSON_SCHEMA`, `SECURITY_REVIEW`,
+`RUFF` (one-liners in the §1 tree); calibration `benchmarks/run_calibration.py` + root `BENCHMARKS.md`.
 
-- `tests/conftest.py` — `guard` fixture + in-memory tarball builders. Note: the worm-string fixture puts the marker in CODE not a `//` comment (v2.4 strips comments before matching).
-- `tests/test_patterns.py` — `scan_text` exemplars (one per MALICIOUS_PATTERNS entry — adding a pattern without an exemplar fails the suite), dedup, ASCII-only Unicode-escape regression (§5.6).
-- `tests/test_known_bad.py` — `KNOWN_BAD` shape (allows the v2.4 `advisories` key), `HIGH_VALUE_TARGETS` superset, `DAEMON_PATHS["windows"] == []` guard, `CREDENTIAL_FILES`.
-- `tests/test_tarball.py` — `scan_tarball_bytes` payload-filename / worm-string / ASCII-obfuscation detection + i18n non-detection + robustness (binary/non-gzip/empty).
-- `tests/test_finding.py` — v2.4 `Finding` dataclass (defaults, `__iter__` backward-compat, `to_dict()` schema keys, independent mutable default) + `_wrap_finding`.
-- `tests/test_typosquatting.py` — `_levenshtein` distances + `check_typosquatting` HIGH/MEDIUM/None boundaries.
-- `tests/test_lockfile.py` — `_lockfile_packages` v1 (nested) / v2-v3 (`packages` dict) normalisation.
-- `tests/test_noise_filter.py` — `_distrib_noise_filter` per-path-class incl. the CRITICAL→MEDIUM non-exec-dir rule (regression guard for Pillow/pymongo/virtualenv).
-- `tests/test_sentinel.py` — `_sentinel_wrap`/`_sentinel_strip` round-trip + multi-block + idempotence (regression guard for `--unprotect`).
-- `tests/test_json_schema.py` — `--json` schema validation (top-level + Finding keys, exit-code mapping, advisory enrichment, tuple normalisation) without network.
-
-**Adding a pattern**: add a matching entry to `tests/test_patterns.py::EXEMPLARS` or `test_each_pattern_has_an_exemplar` fails (intentional).
-
-Still open (P1 in `docs/SECURITY_REVIEW.md §8`): a fuzz harness on `scan_text` / `scan_tarball_bytes` / `_lockfile_packages`; a sandboxed `tests/test_protect.py` exercising the full `--protect`→`--unprotect` filesystem round-trip.
-
-### 8.2 Linter / formatter — `ruff` ✅ DONE
-
-`ruff` configured in `pyproject.toml`. Full explainer at `docs/RUFF.md`.
+### 8.2 Dev commands & gates
 
 ```bash
-python -m ruff check .                 # report
-python -m ruff check . --fix           # auto-fix the safe ones
-python -m ruff format .                # format
+python -m pytest                 # 104 tests, ~0.3s    (-v for per-test names)
+python -m ruff check .           # MUST exit 0 — CI enforces   (--fix / format .)
+python build.py                  # → dist/shai_hulud_guard[.exe], prints sha256   (--clean)
 ```
 
-Selected rule groups: `E F W I B UP S C4 SIM RET`. The `S` (bandit-equivalent security) group is on because this is a security tool.
+- **Adding a `MALICIOUS_PATTERNS` entry REQUIRES** a matching exemplar in `tests/test_patterns.py::EXEMPLARS`,
+  or `test_each_pattern_has_an_exemplar` fails (intentional).
+- **Calibration gate — run before any pattern change** (§6 baseline + `benchmarks/run_calibration.py`): the FP
+  set (numpy/react/django/flask/lodash/cryptography) stays ≤ 25/100 with no genuine FP; the TP set
+  (intercom-client@7.0.4, @tanstack/react-router@1.169.5) stays CRITICAL.
+- **Keep `CLAUDE.md` current in the same commit** as any change to version / CLI flag / exit code / safety
+  invariant / IOC source / public surface. ruff rule groups + deliberate ignores: `pyproject.toml` +
+  `docs/RUFF.md` (rationale in `MEMORY.md §3`).
 
-Deliberate ignores: `S603`, `S607`, `S310`, `S324`, `E501`, plus `S110` / `SIM105` / `SIM102` — best-effort `try/except/pass` is an architectural choice (a forensic scan must not crash on one unreadable file, §5.8), and the two `SIM` rules are style. Reasoning is in the comment above each in `pyproject.toml`. The archived `legacy/` tree is excluded from linting (unmaintained, §1), and `benchmarks/` has a small per-file-ignore (`assert` + typing/f-string parity).
+### 8.3 Commit / signing (must follow)
 
-**`ruff check .` exits 0** (clean) — this is what CI enforces. Earlier the command reported residual findings; they are now either fixed (unused loop vars, ambiguous name, env-var casing, import order) or documented-ignored. Keep it at zero: if a change adds a finding, fix it or add a justified ignore in the same commit.
+Remote = **PUBLIC** `FractalRecursion/shai-hulud-guard`. **Don't commit to `main` directly — branch first.**
+SSH signing is repo-local (`gpg.format=ssh`, `commit`/`tag.gpgsign`; key `~/.ssh/id_ed25519_shguard`,
+signing-only, passphrase-free; `~/.ssh/allowed_signers` for local verify). Committer email = GitHub noreply →
+commits show **Verified**. Pushes over **HTTPS** (`gh` as FractalRecursion). All GitHub Actions are
+**SHA-pinned** (dogfoods the action-poisoning defence; Dependabot bumps the pins). Full infra / CI / release /
+signing history → `MEMORY.md §3`.
 
-### 8.3 Build / packaging — PyInstaller ✅ DONE
+### 8.4 TODO — undone, prioritised (first glance)
 
-Single `.py` file *and* prebuilt single-file binary via PyInstaller:
+**Done** (history → `MEMORY.md §3–§4`): SSH commit+tag signing · `ci.yml` · `release.yml` · CodeQL + Scorecard ·
+public repo + push · `KNOWN_BAD` advisories (OSV) + `tools/refresh_advisories.py` · QUICKSTART→v2.4 · OPEN-2
+maintainer scoring · matplotlib FP / subprocess split · **`--remove` pre-reqs (a) argv executor + (b) F1
+reversed-marker** (committed `665efcd`).
 
-```bash
-python build.py            # build → dist/shai_hulud_guard[.exe] (prints sha256)
-python build.py --clean    # rm -rf build/ dist/ *.spec
-```
-
-The canonical artefact is the source `.py` file; the binary is convenience.
-`build.py` builds **only** the canonical `shai_hulud_guard.py` (the old `--v1`/`--v2`
-split + the dead `"shai_hulud_guard V2.0.py"` path were removed); `build.ps1` and the
-`Makefile` were updated in lockstep. The release workflow consumes this script.
-
-### 8.4 Git state
-
-- `.gitignore` — Python build/cache, venv, PyInstaller `dist/` `build/` `*.spec`, runtime-generated reports (`shai_hulud_report_*.txt`, `shai_hulud_pin_actions.txt`, `npm_safe_install.py`), editor junk, OS junk, `.env*`, `.claude/`.
-- `.gitattributes` — LF for source, CRLF for `.bat`/`.ps1`, binary blobs marked binary.
-- **Commit signing — SSH (repo-local).** `gpg.format=ssh`, `commit.gpgsign=true`, `tag.gpgsign=true`; signing key `~/.ssh/id_ed25519_shguard(.pub)` (signing-only, no passphrase for non-interactive commits); local verification via `~/.ssh/allowed_signers`. Committer email is the auto-verified GitHub noreply, so commits show **Verified** on GitHub. Commits `0be0733/cdd134a/f3e2c4c` predate signing and stay unsigned by design (rewriting them would break the hashes referenced across the docs); every commit from the productionisation commit onward is signed.
-- Branches: `release/v2.4.0` (productionised line) merged `--no-ff` into `main`; signed annotated tag **`v2.4.0`**.
-- **Remote — PUBLIC GitHub repo** `FractalRecursion/shai-hulud-guard` (public, for the portfolio/recruiter goal — **supersedes the earlier "private" instruction**).
-
-**Project TODO — prioritised, numbered (user-requested features first, then release hardening):**
-
-1. **⭐ CRITICAL — one-command removal of infected packages (`--remove`).** After `--scan` finds infection, remove it safely in ONE command. Thin orchestrator over existing `run_scan`/`classify_infection`/`generate_remediation`/`_write_cleanup_script`/`_write_daemon_script`. **Load-bearing safe order:** (1) remove persistence daemon FIRST (§5.2 kill-switch wipes `~/`), (2) remove infected packages by **deleting `node_modules/<pkg>` directly** / `pip uninstall -y` — for npm use `--ignore-scripts` so a malicious uninstall hook can't execute (§5.1), (3) delete payload files, (4) NEVER auto-revoke creds — print the manual rotation checklist after, (5) audit/rebuild guidance. Add `run_remove()` near `run_patch` (~L2584) + `--remove` in `main()`; `tests/test_remove.py`. Full design in `docs/SESSION_STATE.md §5`. **Pre-reqs that land first (the "before `--remove`" work): (a) convert `_execute_cmds` + the `generate_remediation` auto-path from `shell=True` → list-form argv (§5.8; injection-proof; add `--ignore-scripts`) so `--remove` inherits a safe executor — supersedes the old "reuse `_execute_cmds`" note; (b) F1 reversed-marker pattern (catch the reversed `Shai-Hulud` marker the antv `_indicators` documents).** **✅ Pre-reqs (a)+(b) DONE & validated (ruff clean · pytest 104 · self-test 6/6).** **Default posture (decided): dry-run preview; `--apply` to execute. npm-first (PyPI follow-up). Full build handoff: `docs/HANDOFF_REMOVE.md`.**
-2. **Local-file / installer scanner** — new `--scan-file <path>` mode to vet an already-downloaded artifact (`.tgz`/`.whl`/`.zip`/`.tar.gz`, best-effort on installers/scripts) *before* opening it. Reuse `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`; preserve never-execute (§5.1).
-3. **P0 — Commit/release signing.** ✅ SSH commit + tag signing DONE (see git state above); release artifacts carry SLSA build-provenance via `release.yml`. ☐ **GPG signing (learning goal):** learn + enable GPG commit/tag signing and compare the SSH vs GPG vs Sigstore trust models.
-4. **P0 — `.github/workflows/ci.yml`** ✅ DONE — matrix `os: [ubuntu, windows, macos] × py: [3.8, 3.10, 3.12]`, SHA-pinned actions, `ruff check . && pytest && --self-test`. Badge turns green on first push.
-5. **P0 — `.github/workflows/release.yml`** ✅ DONE — on tag `v*`: per-OS PyInstaller build + `SHA256SUMS` + SLSA build-provenance attestation; Release published via `gh`.
-6. **P0 — Public GitHub repo + push** (Phase B): `gh auth login` (human-gated) → register SSH key as a *signing* key (`gh ssh-key add --type signing`) → `gh repo create shai-hulud-guard --public --source . --remote origin --push` → enable branch protection on `main` (require CI) + repo topics.
-7. **P1 — Fuzz harness** on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages`; `tests/test_protect.py` filesystem round-trip. *(KNOWN_BAD advisory population ✅ DONE — OSV-sourced GHSA IDs + `tools/refresh_advisories.py`.)*
-8. **P2 — Enterprise directions:** SARIF output (findings in the GitHub Security tab), publish as a reusable GitHub Action / pre-commit hook, SBOM (CycloneDX/SPDX) ingestion, PyPI maintainer-drift heuristic.
-9. **Housekeeping:** ruff residual-cleanup PR. *(QUICKSTART→v2.4 ✅ DONE; OPEN-2 maintainer-scoring mismatch ✅ FIXED; matplotlib FP & subprocess split ✅ DONE — see DESIGN §2.9.)*
-10. **F2+F3 — externalize IOC data → versioned `threat_intel/*.json` with a structured `_indicators` block** *(after `--remove`; derived from perplexityai/bumblebee).* Move `KNOWN_BAD`/`MALICIOUS_PATTERNS` into data files the scanner loads at startup (stdlib-only, schema-versioned). `_indicators` carries exfil host / preinstall cmd / decryptor global / markers (incl. reversed). Lets IOCs ship via PR without touching the scanner.
-11. **F4 — `--exposure-catalog <path>` consumer** *(after `--remove`; depends on #10's schema).* Exact `(ecosystem, name, version)` match mode — a low-false-positive complement to the heuristics that can ingest bumblebee's own catalogs (interop).
-12. **F5 — MCP-config + VS Code-extension inventory scan** *(after `--remove`).* New supply-chain surface (e.g. `nx-console-vscode`-style compromises). List presence/metadata only; **never emit `env`/credential values** (§5.3 / §5.11).
-13. **`--scan-repo <url>` — remote-repo scan (⚠ PENDING USER GO/NO-GO).** Scan a Git repo by URL for Shai-Hulud IOCs. *Reuses* the scan engine (`scan_text`/`scan_tarball_bytes`/`_lockfile_packages`/`KNOWN_BAD`) but needs **new functions** (`_parse_repo_url`, `_repo_archive_url`, `run_scan_repo`) **and a §5.4 relaxation** to fetch read-only source archives from `codeload.github.com`/GitLab. Recommended design: fetch source tarball → scan **in memory** (never clone/extract/`npm install`/execute — §5.1); add an explicit host allowlist to `fetch_bytes` at the same time.
-14. **QUICKSTART overhaul (accessibility-first, golden-standard).** (a) command×function table aggregated by use case; (b) per-use-case **time-ordered** table (recommended run order + what each step does); (c) plain-text install guide + copy-paste snippets. Technical yet readable for a new learner.
-15. **Cognitive-accessibility statement of intent (user-authored doc).** A statement on neurodivergence + openness to new learners — an ethical principle / statement of intent. User crafts the prose; track submission + link it from README/QUICKSTART.
-
-### 8.5 Documentation surface
-
-- `docs/THREAT_MODEL.md` — Wave 1-5 attack chain → which v2.4 check/pattern/mode catches each step.
-- `docs/DESIGN.md` — Invariants, trade-offs (incl. §2.5 non-exec-dir demotion), non-goals.
-- `docs/JSON_SCHEMA.md` — `--json` schema, with an LLM-paste-ready example.
-- `docs/SECURITY_REVIEW.md` — framework-driven (NIST CSF 2.0 / SSDF, OpenSSF Scorecard, OWASP CICD-SEC, SLSA, MITRE ATT&CK, CWE) final review + scored assessment + prioritised roadmap.
-- `docs/RUFF.md` — ruff rule-group explainer.
-- `docs/SESSION_STATE.md` — point-in-time session handoff (verbatim detection logic, calibration numbers, open issues, exact next action). Snapshot as of commit `cdd134a`; may go stale — trust the code + this CLAUDE.md over it if they diverge.
-- `benchmarks/run_calibration.py` + `BENCHMARKS.md` — live-registry top-50 npm + top-50 PyPI scoring, **pinned to stable versions** for reproducibility (no publish-age noise).
-
-### 8.6 CI / GitHub workflows & community files ✅ NEW
-
-All GitHub Actions are **SHA-pinned** (not tag-pinned) — dogfooding the action-poisoning defence the tool itself detects; Dependabot bumps the pins.
-
-- `.github/workflows/ci.yml` — matrix CI (ruff + pytest + `--self-test`); macOS 3.8 covered via the `macos-13` Intel runner (arm64 `macos-latest` has no 3.8).
-- `.github/workflows/release.yml` — tag-triggered per-OS build + `SHA256SUMS` + SLSA build-provenance (`actions/attest-build-provenance`); Release via `gh`.
-- `.github/workflows/codeql.yml` — CodeQL code scanning (python, `security-and-quality`).
-- `.github/workflows/scorecard.yml` — OpenSSF Scorecard (`publish_results: true` → README badge + SARIF to code-scanning).
-- `.github/dependabot.yml` — weekly `github-actions` + `pip`(dev) update PRs.
-- `.github/ISSUE_TEMPLATE/{bug_report,ioc_report,feature_request}.yml` + `config.yml` — the IOC template enforces the §4.7 cited-source rule; `config.yml` routes vulns to private reporting.
-- `.github/PULL_REQUEST_TEMPLATE.md` — checklist mirrors the §5 invariants + the calibration gate.
-- `.github/CODEOWNERS`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`.
-- README badges: live CI / CodeQL / OpenSSF Scorecard / latest-release (the old hardcoded "self-test 6/6" badge was removed in favour of the live CI badge).
+**Open:**
+1. **⭐ `--remove`** — one-command safe removal after `--scan`. Pre-reqs DONE; build the orchestrator (dry-run
+   default, `--apply`, npm-first, **quarantine-not-delete**, **daemon-first** order, never auto-revoke creds).
+   **Full build guide: `MEMORY.md §6`.**
+2. **`--scan-file <path>`** — vet an already-downloaded artifact (`.tgz`/`.whl`/`.zip`/`.tar.gz`) before opening
+   it. Reuse `scan_tarball_bytes`/`scan_wheel_bytes`/`scan_text`; never-execute (§5.1).
+3. **GPG signing (learning goal)** — enable + compare SSH vs GPG vs Sigstore trust models.
+4. **Fuzz harness** on `scan_text`/`scan_tarball_bytes`/`_lockfile_packages` + `tests/test_protect.py`
+   `--protect`→`--unprotect` round-trip.
+5. **Enterprise:** SARIF output (GitHub Security tab), reusable Action / pre-commit hook, SBOM (CycloneDX/SPDX)
+   ingestion, PyPI maintainer-drift heuristic.
+6. **F2+F3** — externalize IOC data → versioned `threat_intel/*.json` + structured `_indicators` (exfil host /
+   preinstall cmd / decryptor global / markers incl. reversed); scanner loads at startup, stdlib-only,
+   schema-versioned. *(after `--remove`; from `perplexityai/bumblebee`)*
+7. **F4 `--exposure-catalog <path>`** — exact `(ecosystem, name, version)` match consumer; low-FP complement to
+   the heuristics. *(depends on #6 schema)*
+8. **F5** — MCP-config + VS Code-extension inventory scan (e.g. `nx-console-vscode`-style); presence/metadata
+   only, **never** emit `env`/credential values (§5.3 / §5.11).
+9. **`--scan-repo <url>`** (⚠ PENDING USER GO/NO-GO) — scan a repo by URL via `_parse_repo_url` /
+   `_repo_archive_url` / `run_scan_repo`; fetch source tarball → scan **in memory** (never
+   clone/extract/`npm install`/execute — §5.1); add a host allowlist to `fetch_bytes` + a §5.4 relaxation.
+10. **QUICKSTART overhaul (accessibility-first):** command×function table by use case; per-use-case
+    time-ordered table; plain-text install + copy-paste snippets.
+11. **Cognitive-accessibility statement of intent** (user-authored; track submission + link from README/QUICKSTART).
+12. **Housekeeping:** ruff residual-cleanup PR; branch protection on `main` (require CI, when a collaborator joins).
 
 ---
 
