@@ -257,6 +257,17 @@ Open items also live in `CLAUDE.md §8.4` (the first-glance TODO). Detail:
   SSH signing configured (commits show Verified); pushes over HTTPS (`gh` as FractalRecursion).
 - Open PRs #1–#3 are **Dependabot** (unrelated). Commit shape for `--remove`: **commit A = Phase 0a+0b DONE
   (`665efcd`)**; commit B = `--remove` + tests + docs + version bump → one `feature/remove` PR.
+- **Push vs PR — terminology lock.** The term is **Pull Request (PR)** — **never** "push request." `git push`
+  alone makes a branch publicly visible on GitHub (the repo is public); a **PR is a separate merge proposal,
+  NOT required for visibility**. Pipeline: `add → commit (local) → push (branch → GitHub, now public) → open
+  PR (merge proposal) → CI/review → merge`. `working-tree clean` is a **local** state (`git status` zero) and
+  is **orthogonal** to whether a PR exists.
+- **Bug-fix-on-branch convention.** A bug found on a pushed feature branch (with or without an open PR) is
+  fixed on the **same branch** → commit → push. An existing PR auto-tracks the branch HEAD; **never open a
+  new PR just to land a fix**. A PR is opened *because* the branch is ready, not as a precondition for working
+  on it. Choose merge strategy consistently — `release/v2.4.0` used `--no-ff`; for `feature/remove` either
+  `--no-ff` (matches convention, preserves topology) or **squash-merge** (one tidy commit per feature) is
+  acceptable. Avoid messy intermediate commits on `main`.
 
 ---
 
